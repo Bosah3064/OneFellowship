@@ -11,9 +11,38 @@ export const AuthService = {
    */
   async signIn(email, password) {
     const auth = getAuth();
+    const db = getFirestore();
     try {
       const userCredential = await auth.signInWithEmailAndPassword(email.trim(), password);
-      return userCredential.user;
+      const user = userCredential.user;
+
+      // Auto-provision Firestore document if missing
+      if (user && db) {
+        try {
+          const docRef = db.collection('members').doc(user.uid);
+          const docSnap = await docRef.get();
+          if (!docSnap.exists) {
+            const cleanEmail = (user.email || email).trim();
+            const displayName = user.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Member');
+            await docRef.set({
+              id: user.uid,
+              full_name: displayName,
+              email: cleanEmail,
+              phone: user.phoneNumber || null,
+              role: (cleanEmail === 'bosah3064@gmail.com' || cleanEmail === 'lame3064@gmail.com') ? 'admin' : 'member',
+              status: 'active',
+              form_details: {},
+              join_date: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              needs_password_reset: false
+            }, { merge: true });
+          }
+        } catch (dbErr) {
+          console.warn('Auto-provisioning member doc warning:', dbErr);
+        }
+      }
+
+      return user;
     } catch (error) {
       throw new Error(handleFirebaseError(error, 'Invalid email or password.'));
     }
@@ -141,7 +170,30 @@ export const AuthService = {
    */
   onAuthStateChange(callback) {
     const auth = getAuth();
-    return auth.onAuthStateChanged((user) => {
+    const db = getFirestore();
+    return auth.onAuthStateChanged(async (user) => {
+      if (user && db) {
+        try {
+          const docRef = db.collection('members').doc(user.uid);
+          const docSnap = await docRef.get();
+          if (!docSnap.exists) {
+            const cleanEmail = (user.email || '').trim();
+            const displayName = user.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Member');
+            await docRef.set({
+              id: user.uid,
+              full_name: displayName,
+              email: cleanEmail,
+              phone: user.phoneNumber || null,
+              role: (cleanEmail === 'bosah3064@gmail.com' || cleanEmail === 'lame3064@gmail.com') ? 'admin' : 'member',
+              status: 'active',
+              form_details: {},
+              join_date: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              needs_password_reset: false
+            }, { merge: true });
+          }
+        } catch (_) {}
+      }
       callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', user ? { user } : null);
     });
   }

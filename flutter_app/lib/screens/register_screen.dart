@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
+import 'complete_profile_screen.dart';
 import 'dashboard_screen.dart';
 import 'login_screen.dart';
 
@@ -106,7 +107,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await SupabaseService.signUp(name, email, password);
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, DashboardScreen.route);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
+      );
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString());

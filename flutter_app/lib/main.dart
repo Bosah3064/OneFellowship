@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import 'app_colors.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/complete_profile_screen.dart';
+import 'screens/biometric_unlock_screen.dart';
 import 'screens/payment_history_screen.dart';
 import 'screens/admin_panel_screen.dart';
 import 'screens/manage_members_screen.dart';
@@ -15,11 +19,9 @@ import 'screens/notifications_screen.dart';
 import 'screens/manage_notifications_screen.dart';
 import 'screens/admin_wallet_screen.dart';
 import 'screens/terms_and_conditions_screen.dart';
-import 'services/supabase_service.dart';
-
-import 'package:google_fonts/google_fonts.dart';
-
 import 'screens/force_change_password_screen.dart';
+import 'services/biometric_service.dart';
+import 'services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +38,24 @@ void main() async {
     await SupabaseService.init();
     final valid = await SupabaseService.isSessionValid();
     if (valid) {
-      initRoute = DashboardScreen.route;
+      final bioAvail = await BiometricService.isBiometricAvailable();
+      final bioEnabled = await BiometricService.isBiometricEnabled();
+
+      if (bioAvail && bioEnabled) {
+        initRoute = BiometricUnlockScreen.route;
+      } else {
+        final u = SupabaseService.currentUser;
+        if (u != null) {
+          final profileDone = await SupabaseService.isProfileComplete(u.id);
+          if (!profileDone) {
+            initRoute = CompleteProfileScreen.route;
+          } else {
+            initRoute = DashboardScreen.route;
+          }
+        } else {
+          initRoute = DashboardScreen.route;
+        }
+      }
     }
   } catch (e) {
     debugPrint('Firebase backend init error: $e');
@@ -131,6 +150,8 @@ class OneFellowshipApp extends StatelessWidget {
         WelcomeScreen.route: (_) => const WelcomeScreen(),
         LoginScreen.route: (_) => const LoginScreen(),
         RegisterScreen.route: (_) => const RegisterScreen(),
+        CompleteProfileScreen.route: (_) => const CompleteProfileScreen(),
+        BiometricUnlockScreen.route: (_) => const BiometricUnlockScreen(),
         ResetPasswordScreen.route: (_) => const ResetPasswordScreen(),
         ForceChangePasswordScreen.route: (_) => const ForceChangePasswordScreen(),
         DashboardScreen.route: (_) => const DashboardScreen(),

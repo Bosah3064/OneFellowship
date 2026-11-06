@@ -105,7 +105,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     switch (type) {
       case 'payment': return AppColors.primary;
       case 'approval': return AppColors.success;
-      case 'system': return Colors.purple.shade600;
+      case 'system': return AppColors.primaryDark;
       default: return AppColors.primary;
     }
   }

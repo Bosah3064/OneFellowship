@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
+import '../services/biometric_service.dart';
+import 'complete_profile_screen.dart';
 import 'dashboard_screen.dart';
 import 'force_change_password_screen.dart';
 import 'register_screen.dart';
@@ -22,6 +24,44 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _canUseBiometric = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometrics();
+  }
+
+  Future<void> _checkBiometrics() async {
+    try {
+      final available = await BiometricService.isBiometricAvailable();
+      final enabled = await BiometricService.isBiometricEnabled();
+      final user = SupabaseService.currentUser;
+      if (available && enabled && user != null && mounted) {
+        setState(() => _canUseBiometric = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    final success = await BiometricService.authenticate(
+      reason: 'Scan your fingerprint to unlock OneFellowship',
+    );
+    if (success && mounted) {
+      final user = SupabaseService.currentUser;
+      if (user != null) {
+        final isComplete = await SupabaseService.isProfileComplete(user.id);
+        if (!isComplete && mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
+          );
+          return;
+        }
+        Navigator.pushReplacementNamed(context, DashboardScreen.route);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -54,6 +94,17 @@ class _LoginScreenState extends State<LoginScreen> {
       if (memberData != null && memberData['requires_password_reset'] == true) {
         Navigator.pushReplacementNamed(context, ForceChangePasswordScreen.route);
       } else {
+        final u = SupabaseService.currentUser;
+        if (u != null) {
+          final isComplete = await SupabaseService.isProfileComplete(u.id);
+          if (!isComplete && mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
+            );
+            return;
+          }
+        }
         Navigator.pushReplacementNamed(context, DashboardScreen.route);
       }
     } catch (e) {
@@ -509,6 +560,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
           ),
         ),
+        if (_canUseBiometric) ...[
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _unlockWithBiometrics,
+              icon: const Icon(Icons.fingerprint_rounded, color: AppColors.primary, size: 24),
+              label: Text(
+                'Unlock with Fingerprint',
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
 
         // Register Link

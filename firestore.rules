@@ -12,27 +12,27 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+    function isMemberDoc(userId) {
+      return exists(/databases/$(database)/documents/members/$(userId));
     }
 
-    function hasRole(role) {
-      return isAuthenticated() && getUserData().role == role;
+    function getUserRole() {
+      return (isAuthenticated() && isMemberDoc(request.auth.uid))
+        ? get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role
+        : 'member';
     }
 
     function isAdmin() {
       return isAuthenticated() && (
-        getUserData().role == 'admin' || 
-        getUserData().role == 'superadmin'
+        request.auth.token.email in ['bosah3064@gmail.com', 'lame3064@gmail.com', 'admin@onefellowship.org'] ||
+        getUserRole() in ['admin', 'superadmin']
       );
     }
 
     function isExecutive() {
       return isAuthenticated() && (
-        getUserData().role == 'admin' ||
-        getUserData().role == 'treasury' ||
-        getUserData().role == 'chairperson' ||
-        getUserData().role == 'vice_chairperson'
+        isAdmin() ||
+        getUserRole() in ['treasury', 'chairperson', 'vice_chairperson']
       );
     }
 
@@ -41,17 +41,17 @@ service cloud.firestore {
     // Document ID matches the user's Firebase Auth UID
     // =========================================================================
     match /members/{memberId} {
-      // Any authenticated user can read basic member directory, or full details if self/admin
+      // Any authenticated user can read directory
       allow read: if isAuthenticated();
 
-      // Users can create their own document on sign up, or admins can create accounts
-      allow create: if isOwner(memberId) || isExecutive();
+      // Authenticated users can create their own member record or executives can create members
+      allow create: if isAuthenticated() && (isOwner(memberId) || isExecutive());
 
-      // Users can update their own personal info and form_details, but NOT their own role or status
-      // Admins and executives can update all fields
-      allow update: if isExecutive() || (
-        isOwner(memberId) && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])
+      // Users can update their own profile and form_details.
+      // Executives and admins can update all fields.
+      allow update: if isAuthenticated() && (
+        isExecutive() || 
+        isOwner(memberId)
       );
 
       // Only admins can delete members
@@ -63,12 +63,19 @@ service cloud.firestore {
     // =========================================================================
     match /payments/{paymentId} {
       // Members can read their own payments; executives can read all payments
-      allow read: if isExecutive() || (
-        isAuthenticated() && resource.data.member_id == request.auth.uid
+      allow read: if isAuthenticated() && (
+        isExecutive() || 
+        resource.data.member_id == request.auth.uid
       );
 
-      // Only treasury, admins, and executives can record, edit, or delete payments
-      allow create, update, delete: if isExecutive();
+      // Executives can record, edit, or delete payments
+      // Authenticated users can record a pending payment for themselves
+      allow create: if isAuthenticated() && (
+        isExecutive() || 
+        request.resource.data.member_id == request.auth.uid
+      );
+      
+      allow update, delete: if isExecutive();
     }
 
     // =========================================================================
@@ -78,15 +85,30 @@ service cloud.firestore {
       // Members can read notifications sent to 'all' or to their specific UID
       allow read: if isAuthenticated() && (
         resource.data.recipient == 'all' || 
-        resource.data.recipient == request.auth.uid
+        resource.data.recipient == request.auth.uid ||
+        isExecutive()
+      );
+
+      // Users can mark notifications as read
+      allow update: if isAuthenticated() && (
+        isExecutive() ||
+        (resource.data.recipient == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read']))
       );
 
       // Executives can broadcast and manage notifications
-      allow create, update, delete: if isExecutive();
+      allow create, delete: if isExecutive();
     }
 
     // =========================================================================
-    // FORM SCHEMA COLLECTION (Dynamic Google Forms Profile Configuration)
+    // ORGANIZATION EXPENSES COLLECTION
+    // =========================================================================
+    match /organization_expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow write: if isExecutive();
+    }
+
+    // =========================================================================
+    // FORM SCHEMA COLLECTION
     // =========================================================================
     match /form_schema/{schemaId} {
       allow read: if isAuthenticated();
@@ -94,4 +116,3 @@ service cloud.firestore {
     }
   }
 }
-

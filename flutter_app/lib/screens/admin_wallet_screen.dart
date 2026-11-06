@@ -13,7 +13,6 @@ class AdminWalletScreen extends StatefulWidget {
 
 class _AdminWalletScreenState extends State<AdminWalletScreen> {
   bool _isLoading = true;
-  List<Map<String, dynamic>> _payments = [];
   List<Map<String, dynamic>> _expenses = [];
 
   // Derived financial metrics
@@ -73,7 +72,6 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
 
       if (mounted) {
         setState(() {
-          _payments = payments;
           _expenses = expenses;
           _totalCollected = collected;
           _totalSavings = savings;
@@ -273,7 +271,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                             child: _buildSummaryCard(
                               title: 'Member Payouts',
                               amount: _totalPaidOut,
-                              color: AppColors.purple,
+                              color: AppColors.primary,
                               icon: Icons.card_giftcard_rounded,
                             ),
                           ),

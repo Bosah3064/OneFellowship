@@ -152,7 +152,7 @@ class _ManageNotificationsScreenState extends State<ManageNotificationsScreen> {
                         items: const [
                           DropdownMenuItem(value: 'info', child: Text('Information (Blue)')),
                           DropdownMenuItem(value: 'system', child: Text('System Alert (Yellow)')),
-                          DropdownMenuItem(value: 'payment', child: Text('Payment Request (Purple)')),
+                          DropdownMenuItem(value: 'payment', child: Text('Payment Request (Amber)')),
                           DropdownMenuItem(value: 'approval', child: Text('Approval (Green)')),
                         ],
                         onChanged: (v) => setState(() => _type = v!),

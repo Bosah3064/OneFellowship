@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
+import '../services/biometric_service.dart';
+import 'complete_profile_screen.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +20,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Map<String, dynamic>? _member;
   bool _isLoading = true;
   bool _voiceGreetingEnabled = true;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
 
   String _getAccountNumber() {
     if (_member == null) return 'N/A';
@@ -43,8 +47,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
+    final bioAvail = await BiometricService.isBiometricAvailable();
+    final bioEnabled = await BiometricService.isBiometricEnabled();
     setState(() {
       _voiceGreetingEnabled = prefs.getBool('voice_greeting') ?? true;
+      _biometricAvailable = bioAvail;
+      _biometricEnabled = bioEnabled;
     });
   }
 
@@ -327,7 +335,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           physics: const BouncingScrollPhysics(),
                           child: Row(
                             children: [
-                              _buildThemeCircle(0, const [Color(0xFF1d5f99), Color(0xFF683669), Color(0xFFa5243d)], currentTheme),
+                              _buildThemeCircle(0, const [Color(0xFF0A2D6B), Color(0xFF0B4FBB), Color(0xFF29B6F6)], currentTheme),
                               _buildThemeCircle(1, const [Color(0xFF0891b2), Color(0xFF1e40af), Color(0xFF3730a3)], currentTheme),
                               _buildThemeCircle(2, const [Color(0xFFe11d48), Color(0xFFf97316), Color(0xFFeab308)], currentTheme),
                               _buildThemeCircle(3, const [Color(0xFF059669), Color(0xFF0d9488), Color(0xFF06b6d4)], currentTheme),
@@ -364,6 +372,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       child: Column(
                         children: [
+                          _buildActionRow(Icons.assignment_ind_rounded, 'Membership Profile & KYC Form', () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
+                            );
+                            _loadMember();
+                          }),
+                          _buildDivider(),
                           _buildInfoRow(Icons.phone_rounded, 'Phone', phone),
                           _buildDivider(),
                           _buildInfoRow(Icons.calendar_today_rounded, 'Member Since', joinDate),
@@ -380,7 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                     child: Text(
-                      'App Preferences',
+                      'App Preferences & Security',
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -408,6 +424,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: _voiceGreetingEnabled,
                             onChanged: _toggleVoiceGreeting,
                           ),
+                          if (_biometricAvailable) ...[
+                            _buildDivider(),
+                            SwitchListTile(
+                              activeColor: AppColors.primary,
+                              title: Text('Fingerprint / Biometric Unlock', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                              subtitle: Text('Unlock OneFellowship securely using fingerprint', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                              secondary: const Icon(Icons.fingerprint_rounded, color: AppColors.primary, size: 24),
+                              value: _biometricEnabled,
+                              onChanged: (val) async {
+                                if (val) {
+                                  final authenticated = await BiometricService.authenticate(
+                                    reason: 'Scan fingerprint to enable biometric unlock for OneFellowship',
+                                  );
+                                  if (authenticated) {
+                                    await BiometricService.setBiometricEnabled(true);
+                                    setState(() => _biometricEnabled = true);
+                                  }
+                                } else {
+                                  await BiometricService.setBiometricEnabled(false);
+                                  setState(() => _biometricEnabled = false);
+                                }
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),

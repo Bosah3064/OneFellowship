@@ -510,10 +510,10 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
-                                              color: AppColors.purple.withOpacity(0.1),
+                                              color: AppColors.primary.withOpacity(0.1),
                                               borderRadius: BorderRadius.circular(6),
                                             ),
-                                            child: Text(role, style: const TextStyle(color: AppColors.purple, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            child: Text(role, style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.bold)),
                                           ),
                                         ],
                                       ),

@@ -84,11 +84,43 @@ class SupabaseService {
 
   static Future<void> signIn(String email, String password) async {
     await init();
-    await _auth.signInWithEmailAndPassword(
+    final cred = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
+    final user = cred.user;
+    if (user != null) {
+      await _ensureMemberDocument(user);
+    }
     await _recordLoginTime();
+  }
+
+  static Future<void> _ensureMemberDocument(fb_auth.User user) async {
+    try {
+      final docRef = _firestore.collection('members').doc(user.uid);
+      final doc = await docRef.get();
+      final cleanEmail = user.email?.trim() ?? '';
+      if (!doc.exists || doc.data() == null) {
+        final displayName = (user.displayName != null && user.displayName!.isNotEmpty)
+            ? user.displayName!
+            : (cleanEmail.isNotEmpty ? cleanEmail.split('@').first : 'Member');
+        await docRef.set({
+          'id': user.uid,
+          'full_name': displayName,
+          'email': cleanEmail,
+          'phone': user.phoneNumber ?? '',
+          'role': (cleanEmail == 'bosah3064@gmail.com' || cleanEmail == 'lame3064@gmail.com') ? 'admin' : 'member',
+          'status': 'active',
+          'requires_password_reset': false,
+          'created_at': DateTime.now().toIso8601String(),
+          'join_date': DateTime.now().toIso8601String(),
+          'form_details': <String, dynamic>{},
+        }, SetOptions(merge: true));
+        debugPrint('Auto-provisioned Firestore member doc for ${user.uid}');
+      }
+    } catch (e) {
+      debugPrint('Error ensuring member document: $e');
+    }
   }
 
   static Future<void> signUp(String fullName, String email, String password) async {
@@ -104,21 +136,20 @@ class SupabaseService {
         await u.updateDisplayName(fullName);
       } catch (_) {}
 
+      final cleanEmail = email.trim();
       // Write member document in Cloud Firestore
-      try {
-        await _firestore.collection('members').doc(u.uid).set({
-          'id': u.uid,
-          'full_name': fullName,
-          'email': email.trim(),
-          'role': 'member',
-          'status': 'active',
-          'requires_password_reset': false,
-          'created_at': DateTime.now().toIso8601String(),
-          'form_details': {},
-        }, SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('Error creating Firestore member record: $e');
-      }
+      await _firestore.collection('members').doc(u.uid).set({
+        'id': u.uid,
+        'full_name': fullName.trim(),
+        'email': cleanEmail,
+        'phone': '',
+        'role': (cleanEmail == 'bosah3064@gmail.com' || cleanEmail == 'lame3064@gmail.com') ? 'admin' : 'member',
+        'status': 'active',
+        'requires_password_reset': false,
+        'created_at': DateTime.now().toIso8601String(),
+        'join_date': DateTime.now().toIso8601String(),
+        'form_details': <String, dynamic>{},
+      }, SetOptions(merge: true));
 
       await _recordLoginTime();
     } else {
@@ -161,12 +192,63 @@ class SupabaseService {
     final u = currentUser;
     if (u == null) return null;
     try {
-      final doc = await _firestore.collection('members').doc(u.id).get();
-      if (!doc.exists || doc.data() == null) return null;
+      final docRef = _firestore.collection('members').doc(u.id);
+      final doc = await docRef.get();
+      if (!doc.exists || doc.data() == null) {
+        final rawUser = _auth.currentUser;
+        if (rawUser != null) {
+          await _ensureMemberDocument(rawUser);
+          final newDoc = await docRef.get();
+          if (newDoc.exists && newDoc.data() != null) {
+            return {'id': newDoc.id, ...newDoc.data()!};
+          }
+        }
+        return null;
+      }
       return {'id': doc.id, ...doc.data()!};
-    } catch (_) {
+    } catch (e) {
+      debugPrint('fetchCurrentMember error: $e');
       return null;
     }
+  }
+
+  static Future<bool> isProfileComplete(String userId) async {
+    try {
+      final doc = await _firestore.collection('members').doc(userId).get();
+      if (!doc.exists || doc.data() == null) return false;
+      final data = doc.data()!;
+      final phone = (data['phone'] ?? '').toString().trim();
+      final formDetails = (data['form_details'] as Map<String, dynamic>?) ?? {};
+
+      final idNumber = (formDetails['national_id_number'] ?? formDetails['id_number'] ?? '').toString().trim();
+      final branch = (formDetails['branch'] ?? '').toString().trim();
+      final nokName = (formDetails['next_of_kin_full_name'] ?? formDetails['nok_name'] ?? '').toString().trim();
+      final nokPhone = (formDetails['next_of_kin_phone_number'] ?? formDetails['nok_phone'] ?? '').toString().trim();
+
+      return phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty && nokName.isNotEmpty && nokPhone.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> saveProfileDetails(
+    String userId, {
+    required String phone,
+    required Map<String, dynamic> formDetails,
+    String? fullName,
+  }) async {
+    final updateData = <String, dynamic>{
+      'phone': phone.trim(),
+      'form_details': formDetails,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (fullName != null && fullName.trim().isNotEmpty) {
+      updateData['full_name'] = fullName.trim();
+      try {
+        await _auth.currentUser?.updateDisplayName(fullName.trim());
+      } catch (_) {}
+    }
+    await _firestore.collection('members').doc(userId).set(updateData, SetOptions(merge: true));
   }
 
   static Future<void> addMember(Map<String, dynamic> data) async {

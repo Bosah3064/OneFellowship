@@ -984,14 +984,14 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (isReg ? AppColors.purple : AppColors.primary)
+                  color: (isReg ? AppColors.primaryDark : AppColors.primary)
                       .withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   isReg ? 'REGISTRATION' : type.toUpperCase(),
                   style: TextStyle(
-                      color: isReg ? AppColors.purple : AppColors.primary,
+                      color: isReg ? AppColors.primaryDark : AppColors.primary,
                       fontSize: 9,
                       fontWeight: FontWeight.bold),
                 ),
@@ -1620,7 +1620,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _bulkSelectedIds.isEmpty
                         ? Colors.grey.shade300
-                        : AppColors.purple,
+                        : AppColors.primary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                     elevation: 0,
@@ -1654,7 +1654,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm Payout', style: TextStyle(color: Colors.white)),
           ),

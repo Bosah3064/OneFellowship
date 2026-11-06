@@ -25,13 +25,13 @@ class VirtualCard extends StatelessWidget {
 
   /// The 4 gradient themes for the card background.
   static const List<List<Color>> _themes = [
-    // Theme 0 – Default Glamour: Navy → Purple → Crimson
-    [Color(0xFF1d5f99), Color(0xFF683669), Color(0xFFa5243d)],
+    // Theme 0 – OneFellowship Signature: Deep Navy → Royal Blue → Sky Blue
+    [Color(0xFF0A2D6B), Color(0xFF0B4FBB), Color(0xFF29B6F6)],
     // Theme 1 – Ocean Teal: Cyan → Blue → Indigo
     [Color(0xFF0891b2), Color(0xFF1e40af), Color(0xFF3730a3)],
-    // Theme 2 – Sunset Orange: Rose → Orange → Yellow
-    [Color(0xFFe11d48), Color(0xFFf97316), Color(0xFFeab308)],
-    // Theme 3 – Emerald Green: Emerald → Teal → Cyan
+    // Theme 2 – Sunset Amber: Gold → Amber → Deep Blue
+    [Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFFD97706)],
+    // Theme 3 – Emerald Growth: Emerald → Teal → Cyan
     [Color(0xFF059669), Color(0xFF0d9488), Color(0xFF06b6d4)],
   ];
 

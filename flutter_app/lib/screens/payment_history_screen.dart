@@ -116,7 +116,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [AppColors.primary, AppColors.purple],
+                            colors: [AppColors.primaryDark, AppColors.primary],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),

@@ -21,6 +21,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'payment_history_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
+import 'complete_profile_screen.dart';
 
 bool _hasPlayedGreeting = false;
 
@@ -314,9 +315,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     if (missingFields.isNotEmpty) {
-      Future.delayed(const Duration(seconds: 1), () {
+      Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted) {
-          _showProfileCompletionDialog(missingFields);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: false)),
+          ).then((_) => _loadData());
         }
       });
     }
@@ -1077,7 +1081,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Navigator.pushNamed(context, PaymentHistoryScreen.route);
                               }),
                               const SizedBox(width: 12),
-                              _buildQuickAction(Icons.download_rounded, 'Save\nCard', AppColors.purple, _showDownloadOptions),
+                              _buildQuickAction(Icons.download_rounded, 'Save\nCard', AppColors.skyBlue, _showDownloadOptions),
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.settings_rounded, 'Settings', AppColors.warning, () {
                                 Navigator.pushNamed(context, SettingsScreen.route);
@@ -1150,7 +1154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   'Reg. Fee',
                                   _balancesVisible ? 'KES ${_registrationFee.toStringAsFixed(0)}' : '****',
                                   Icons.app_registration_rounded,
-                                  [const Color(0xFF683669), const Color(0xFF9333EA)],
+                                  [AppColors.primaryDark, AppColors.primary],
                                 ),
                               ),
                             ],
@@ -1166,14 +1170,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [Color(0xFF8B5CF6), Color(0xFFC084FC)], // Purple vibrant gradient
+                                colors: [AppColors.primary, AppColors.skyBlue], // Brand vibrant gradient
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                  color: AppColors.primary.withOpacity(0.25),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1430,8 +1434,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     gravity: 0.2,
                     colors: const [
                       AppColors.primary,
-                      AppColors.purple,
-                      AppColors.red,
+                      AppColors.skyBlue,
+                      AppColors.secondary,
                       Colors.amber,
                       Colors.green,
                       Colors.blue,
