@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
@@ -205,19 +206,33 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final idVal = _idNumberCtrl.text.trim();
+      final nokNameVal = _nokNameCtrl.text.trim();
+      final nokPhoneVal = _nokPhoneCtrl.text.trim();
+      final depCountVal = _hasDependants == 'Yes' ? _dependantsCountCtrl.text.trim() : '0';
+
       final formDetails = <String, dynamic>{
-        'national_id_number': _idNumberCtrl.text.trim(),
+        'national_id_number': idVal,
+        'id_number': idVal,
         'date_of_birth': _dobCtrl.text.trim(),
+        'dob': _dobCtrl.text.trim(),
         'gender': _gender ?? '',
         'marital_status': _maritalStatus ?? '',
         'branch': _branch ?? '',
         'occupation': _occupationCtrl.text.trim(),
-        'next_of_kin_full_name': _nokNameCtrl.text.trim(),
-        'next_of_kin_phone_number': _nokPhoneCtrl.text.trim(),
+        'profession': _occupationCtrl.text.trim(),
+        'next_of_kin_full_name': nokNameVal,
+        'next_of_kin_name': nokNameVal,
+        'nok_name': nokNameVal,
+        'next_of_kin_phone_number': nokPhoneVal,
+        'next_of_kin_phone': nokPhoneVal,
+        'nok_phone': nokPhoneVal,
         'next_of_kin_national_id_number': _nokIdCtrl.text.trim(),
         'relationship_to_you': _relationship ?? '',
         'has_dependants': _hasDependants,
-        'number_of_dependants': _hasDependants == 'Yes' ? _dependantsCountCtrl.text.trim() : '0',
+        'dependants': _hasDependants,
+        'number_of_dependants': depCountVal,
+        'dependant_count': depCountVal,
         'is_profile_complete': true,
         'completed_at': DateTime.now().toIso8601String(),
       };
@@ -229,21 +244,22 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         formDetails: formDetails,
       );
 
+      // Lock profile completion in local storage permanently
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('profile_completed_${user.id}', true);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Membership profile submitted successfully!'),
+            content: const Text('✅ Profile submitted & verified! Welcome to OneFellowship.'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
 
-        if (widget.isMandatory || !Navigator.canPop(context)) {
-          Navigator.pushReplacementNamed(context, DashboardScreen.route);
-        } else {
-          Navigator.pop(context, true);
-        }
+        // Clear navigation backstack completely to prevent any accidental back-navigation to login or register
+        Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
       }
     } catch (e) {
       if (mounted) {
@@ -316,9 +332,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : SingleChildScrollView(
+      body: SafeArea(
+        bottom: true,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : SingleChildScrollView(
               padding: EdgeInsets.symmetric(
                 horizontal: isWide ? (screenWidth - 760) / 2 : 16,
                 vertical: 20,
@@ -615,11 +633,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                               ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: MediaQuery.of(context).padding.bottom + 48),
                   ],
                 ),
               ),
             ),
+      ),
     );
   }
 

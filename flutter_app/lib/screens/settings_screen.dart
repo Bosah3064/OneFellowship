@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
 import '../services/biometric_service.dart';
+import '../services/offline_cache_service.dart';
 import 'complete_profile_screen.dart';
 import 'login_screen.dart';
 
@@ -22,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _voiceGreetingEnabled = true;
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
+  int? _localSelectedTheme;
 
   String _getAccountNumber() {
     if (_member == null) return 'N/A';
@@ -67,9 +68,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadMember() async {
     try {
       final member = await SupabaseService.fetchCurrentMember();
+      final theme = await OfflineCacheService.getPreferredTheme();
       if (mounted) {
         setState(() {
           _member = member;
+          _localSelectedTheme = theme;
           _isLoading = false;
         });
       }
@@ -94,30 +97,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _updateTheme(int index) async {
+    // 1. Instant optimistic UI update (0ms delay!)
+    setState(() {
+      _localSelectedTheme = index;
+      if (_member != null) {
+        final fd = Map<String, dynamic>.from(_member!['form_details'] as Map? ?? {});
+        fd['card_theme'] = index;
+        _member!['form_details'] = fd;
+      }
+    });
+
+    // 2. Instant persistent local storage
+    await OfflineCacheService.setPreferredTheme(index);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Card theme applied!', style: GoogleFonts.outfit()),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+
+    // 3. Background remote sync
     try {
       await SupabaseService.updateCardTheme(index);
-      setState(() {
-        if (_member != null) {
-          final fd = _member!['form_details'] as Map<String, dynamic>? ?? {};
-          fd['card_theme'] = index;
-          _member!['form_details'] = fd;
-        }
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Card theme updated!', style: GoogleFonts.outfit()),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating theme: $e')),
-        );
-      }
+      debugPrint('Background card theme sync error: $e');
     }
   }
 
@@ -163,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final role = _member?['role']?.toString() ?? 'member';
     final joinDate = _member?['join_date']?.toString() ?? '';
     final formDetails = _member?['form_details'] as Map<String, dynamic>? ?? {};
-    final currentTheme = formDetails['card_theme'] as int? ?? 0;
+    final currentTheme = _localSelectedTheme ?? (formDetails['card_theme'] as int? ?? 0);
 
     final nameParts = name.split(' ').where((s) => s.isNotEmpty).toList();
     final initials = nameParts.length >= 2 
@@ -454,76 +462,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
 
-                // App section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                    child: Text(
-                      'App Info',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFF3F4F6)),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildInfoRow(Icons.info_outline_rounded, 'Version', '1.0.0'),
-                          _buildDivider(),
-                          _buildInfoRow(Icons.update_rounded, 'Last Update', 'July 2026'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Developer section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                    child: Text(
-                      'Developer',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFF3F4F6)),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildInfoRow(Icons.person_rounded, 'Developer', 'LAMECK BOSIRE'),
-                          _buildDivider(),
-                          _buildInfoRow(Icons.email_rounded, 'Email', 'LAME3064@GMAIL.COM'),
-                          _buildDivider(),
-                          _buildInfoRow(Icons.phone_rounded, 'Phone', '0790397468'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
                 // Admin Controls (Visible to admins, treasury, and chairperson)
                 if (['admin', 'treasury', 'chairperson'].contains(role)) ...[
                   SliverToBoxAdapter(
@@ -570,43 +508,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
-                  
-                  // About & Policies
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                      child: Text(
-                        'ABOUT & POLICIES',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMuted,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFF3F4F6)),
-                        ),
-                        child: _buildActionRow(Icons.policy_rounded, 'Terms & Policies', () {
-                          Navigator.pushNamed(context, '/terms-and-conditions');
-                        }),
-                      ),
-                    ),
-                  ),
                 ],
+
+                // About & Policies
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                    child: Text(
+                      'ABOUT & POLICIES',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFF3F4F6)),
+                      ),
+                      child: _buildActionRow(Icons.policy_rounded, 'Terms & Policies', () {
+                        Navigator.pushNamed(context, '/terms-and-conditions');
+                      }),
+                    ),
+                  ),
+                ),
 
                 // Sign out
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                     child: GestureDetector(
                       onTap: _signOut,
                       child: Container(
@@ -629,6 +567,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                ),
+
+                // App Info section (Placed at the bottom)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                    child: Text(
+                      'App Information',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFF3F4F6)),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildInfoRow(Icons.info_outline_rounded, 'App Name', 'OneFellowship'),
+                          _buildDivider(),
+                          _buildInfoRow(Icons.verified_rounded, 'Version', '1.0.0 (Production)'),
+                          _buildDivider(),
+                          _buildInfoRow(Icons.security_rounded, 'Security', 'Encrypted & Biometric Protected'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Developer section (The absolute last section at the bottom)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                    child: Text(
+                      'Developer Info',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFF3F4F6)),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildInfoRow(Icons.person_rounded, 'Lead Developer', 'LAMECK BOSIRE'),
+                          _buildDivider(),
+                          _buildInfoRow(Icons.email_rounded, 'Email', 'LAME3064@GMAIL.COM'),
+                          _buildDivider(),
+                          _buildInfoRow(Icons.phone_rounded, 'Direct Phone', '0790397468'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Safe Area bottom spacing to prevent navigation bar overlap
+                SliverToBoxAdapter(
+                  child: SizedBox(height: MediaQuery.of(context).padding.bottom + 48),
                 ),
               ],
             ),

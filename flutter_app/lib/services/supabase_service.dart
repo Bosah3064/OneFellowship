@@ -213,21 +213,35 @@ class SupabaseService {
   }
 
   static Future<bool> isProfileComplete(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    // 1. Check local lock first
+    if (prefs.getBool('profile_completed_$userId') == true) {
+      return true;
+    }
+
     try {
       final doc = await _firestore.collection('members').doc(userId).get();
       if (!doc.exists || doc.data() == null) return false;
       final data = doc.data()!;
-      final phone = (data['phone'] ?? '').toString().trim();
       final formDetails = (data['form_details'] as Map<String, dynamic>?) ?? {};
 
+      // Explicit flag
+      if (data['is_profile_complete'] == true || formDetails['is_profile_complete'] == true) {
+        await prefs.setBool('profile_completed_$userId', true);
+        return true;
+      }
+
+      final phone = (data['phone'] ?? '').toString().trim();
       final idNumber = (formDetails['national_id_number'] ?? formDetails['id_number'] ?? '').toString().trim();
       final branch = (formDetails['branch'] ?? '').toString().trim();
-      final nokName = (formDetails['next_of_kin_full_name'] ?? formDetails['nok_name'] ?? '').toString().trim();
-      final nokPhone = (formDetails['next_of_kin_phone_number'] ?? formDetails['nok_phone'] ?? '').toString().trim();
 
-      return phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty && nokName.isNotEmpty && nokPhone.isNotEmpty;
+      final isDone = phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty;
+      if (isDone) {
+        await prefs.setBool('profile_completed_$userId', true);
+      }
+      return isDone;
     } catch (_) {
-      return false;
+      return prefs.getBool('profile_completed_$userId') ?? false;
     }
   }
 
@@ -237,9 +251,20 @@ class SupabaseService {
     required Map<String, dynamic> formDetails,
     String? fullName,
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Lock completion locally so no redirection ever happens again
+    await prefs.setBool('profile_completed_$userId', true);
+
+    final mergedFormDetails = {
+      ...formDetails,
+      'is_profile_complete': true,
+      'completed_at': DateTime.now().toIso8601String(),
+    };
+
     final updateData = <String, dynamic>{
       'phone': phone.trim(),
-      'form_details': formDetails,
+      'is_profile_complete': true,
+      'form_details': mergedFormDetails,
       'updated_at': DateTime.now().toIso8601String(),
     };
     if (fullName != null && fullName.trim().isNotEmpty) {

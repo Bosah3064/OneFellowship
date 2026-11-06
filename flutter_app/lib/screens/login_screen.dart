@@ -44,21 +44,37 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _unlockWithBiometrics() async {
+    final user = SupabaseService.currentUser;
+    if (user == null) {
+      _showError('Please sign in with email & password once to activate biometric login.');
+      return;
+    }
+
     final success = await BiometricService.authenticate(
-      reason: 'Scan your fingerprint to unlock OneFellowship',
+      reason: 'Scan your fingerprint to unlock your OneFellowship account',
     );
     if (success && mounted) {
-      final user = SupabaseService.currentUser;
-      if (user != null) {
-        final isComplete = await SupabaseService.isProfileComplete(user.id);
-        if (!isComplete && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
-          );
-          return;
-        }
-        Navigator.pushReplacementNamed(context, DashboardScreen.route);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Fingerprint verified! Opening account...', style: GoogleFonts.outfit()),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final isComplete = await SupabaseService.isProfileComplete(user.id);
+      if (!isComplete && mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          CompleteProfileScreen.route,
+          (route) => false,
+        );
+        return;
+      }
+
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
       }
     }
   }
@@ -98,14 +114,15 @@ class _LoginScreenState extends State<LoginScreen> {
         if (u != null) {
           final isComplete = await SupabaseService.isProfileComplete(u.id);
           if (!isComplete && mounted) {
-            Navigator.pushReplacement(
+            Navigator.pushNamedAndRemoveUntil(
               context,
-              MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
+              CompleteProfileScreen.route,
+              (route) => false,
             );
             return;
           }
         }
-        Navigator.pushReplacementNamed(context, DashboardScreen.route);
+        Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
       }
     } catch (e) {
       if (!mounted) return;
@@ -407,6 +424,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+        SizedBox(height: MediaQuery.of(context).padding.bottom + 28),
       ],
     );
   }

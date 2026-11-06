@@ -53,6 +53,20 @@ class OfflineCacheService {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  // ─── Card Theme ─────────────────────────────────────────────────────
+
+  static const _keyCardTheme = 'user_card_theme';
+
+  static Future<void> setPreferredTheme(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyCardTheme, index);
+  }
+
+  static Future<int> getPreferredTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyCardTheme) ?? 0;
+  }
+
   // ─── Clear ──────────────────────────────────────────────────────────
 
   static Future<void> clearAll() async {
@@ -60,5 +74,6 @@ class OfflineCacheService {
     await prefs.remove(_keyMember);
     await prefs.remove(_keyPayments);
     await prefs.remove(_keyNotifications);
+    await prefs.remove(_keyCardTheme);
   }
 }

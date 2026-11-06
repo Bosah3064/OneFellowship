@@ -259,6 +259,7 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
                 ],
               ),
             ),

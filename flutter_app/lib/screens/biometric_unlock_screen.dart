@@ -49,16 +49,24 @@ class _BiometricUnlockScreenState extends State<BiometricUnlockScreen> {
       if (!mounted) return;
 
       if (success) {
+        setState(() {
+          _statusMessage = '✅ Verified! Opening your account...';
+        });
+
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        if (!mounted) return;
+
         final u = SupabaseService.currentUser;
         if (u != null) {
           final isComplete = await SupabaseService.isProfileComplete(u.id);
           if (!isComplete && mounted) {
-            Navigator.pushReplacementNamed(context, CompleteProfileScreen.route);
+            Navigator.pushNamedAndRemoveUntil(context, CompleteProfileScreen.route, (r) => false);
             return;
           }
         }
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, widget.targetRoute);
+        Navigator.pushNamedAndRemoveUntil(context, widget.targetRoute, (r) => false);
       } else {
         setState(() {
           _statusMessage = 'Biometric scan cancelled. Tap icon to retry.';

@@ -668,17 +668,6 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     }
   }
 
-  // Helpers
-  static List<String> get _allMonthOptions {
-    final list = <String>[];
-    for (int y = 2025; y <= 2028; y++) {
-      for (final m in _monthNames) {
-        list.add('$m $y');
-      }
-    }
-    return list;
-  }
-
   // ═══════════════════════════════════════════════════════════════
   //  BUILD
   // ═══════════════════════════════════════════════════════════════
@@ -740,14 +729,17 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPaymentsTab(),
-                _buildSummaryTab(),
-                _buildMemberHistoryTab(),
-                _buildBulkActionsTab(),
-              ],
+          : SafeArea(
+              bottom: true,
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildPaymentsTab(),
+                  _buildSummaryTab(),
+                  _buildMemberHistoryTab(),
+                  _buildBulkActionsTab(),
+                ],
+              ),
             ),
     );
   }
@@ -1956,7 +1948,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                                       color: AppColors.textMuted,
                                       fontSize: 12)),
                               Text(
-                                '\$${total.toStringAsFixed(2)}',
+                                'KES ${total.toStringAsFixed(0)}',
                                 style: GoogleFonts.outfit(
                                   color: amountColor,
                                   fontWeight: FontWeight.bold,

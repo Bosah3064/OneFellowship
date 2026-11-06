@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:screenshot/screenshot.dart';
@@ -15,7 +14,6 @@ import '../app_colors.dart';
 import '../services/supabase_service.dart';
 import '../services/offline_cache_service.dart';
 import '../widgets/virtual_card.dart';
-import '../widgets/summary_card.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'payment_history_screen.dart';
@@ -45,6 +43,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _unreadNotifications = 0;
   bool _hasCheckedProfile = false;
   bool _isOffline = false;
+  int? _localCardTheme;
+  bool _profileIncompleteBanner = false;
   StreamSubscription<List<Map<String, dynamic>>>? _notificationSub;
 
   @override
@@ -185,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final member = await SupabaseService.fetchCurrentMember();
       List<Map<String, dynamic>> payments = [];
       int unreadCount = 0;
+      final savedTheme = await OfflineCacheService.getPreferredTheme();
       if (member != null) {
         payments = await SupabaseService.fetchMemberPayments(member['id']);
         unreadCount = await SupabaseService.countUnreadNotifications(member['id']);
@@ -197,6 +198,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _member = member;
           _payments = payments;
           _unreadNotifications = unreadCount;
+          _localCardTheme = savedTheme;
           _isLoading = false;
           _isOffline = false;
         });
@@ -229,367 +231,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // === Profile schema matching the website's canonicalFields ===
-  // Each required field: { key, label, isFieldOnMember (phone lives on members table) }
-  static const _profileFields = [
-    {'key': 'phone', 'label': 'Phone Number', 'isFieldOnMember': true},
-    {'key': 'date_of_birth', 'label': 'Date of Birth', 'isFieldOnMember': false},
-    {'key': 'gender', 'label': 'Gender', 'isFieldOnMember': false},
-    {'key': 'marital_status', 'label': 'Marital Status', 'isFieldOnMember': false},
-    {'key': 'id_number', 'label': 'National ID Number', 'isFieldOnMember': false},
-    {'key': 'branch', 'label': 'Branch', 'isFieldOnMember': false},
-    {'key': 'occupation', 'label': 'Occupation', 'isFieldOnMember': false},
-    {'key': 'next_of_kin_name', 'label': 'Next of Kin Name', 'isFieldOnMember': false},
-    {'key': 'next_of_kin_phone', 'label': 'Next of Kin Phone', 'isFieldOnMember': false},
-    {'key': 'dependants', 'label': 'Any Dependants?', 'isFieldOnMember': false},
-    {'key': 'dependant_count', 'label': 'Number of Dependants', 'isFieldOnMember': false},
-  ];
-
-  // Match website's variationsMap — check legacy field name variations
-  static const _variationsMap = {
-    'date_of_birth': ['date of birth', 'dob', 'date_of_birth'],
-    'gender': ['gender'],
-    'marital_status': ['marital status', 'marital_status'],
-    'id_number': ['national id number', 'id number', 'national id', 'id_number', 'national_id_number'],
-    'branch': ['branch'],
-    'occupation': ['occupation', 'profession', 'occupation/profession'],
-    'next_of_kin_name': ['next of kin full name', 'next of kin name', 'next_of_kin_name', 'next_of_kin_full_name'],
-    'next_of_kin_phone': ['next of kin phone', 'next of kin_phone', 'next_of_kin_phone_number'],
-    'dependants': ['dependants', 'dependents'],
-    'dependant_count': ['dependant_count', 'number of dependants'],
-  };
-
-  /// Resolve a field value from form_details using canonical key + variations (matches website)
-  String _resolveFieldValue(Map<String, dynamic> fd, String canonicalKey) {
-    // Direct match first
-    final direct = fd[canonicalKey];
-    if (direct != null && direct.toString().trim().isNotEmpty) {
-      return _formatValue(direct);
-    }
-    // Try variations
-    final variations = _variationsMap[canonicalKey] ?? [];
-    for (final fdKey in fd.keys) {
-      final clean = fdKey.toLowerCase().trim();
-      if (clean == canonicalKey || variations.any((v) => v.toLowerCase().trim() == clean)) {
-        final val = fd[fdKey];
-        if (val != null && val.toString().trim().isNotEmpty) {
-          return _formatValue(val);
-        }
-      }
-    }
-    return '';
-  }
-
-  String _formatValue(dynamic val) {
-    if (val is List) {
-      if (val.isEmpty) return '';
-      if (val.first is Map) {
-        return val.map((r) => '${r['full_name'] ?? ''} (${r['relationship'] ?? ''})').join(', ');
-      }
-      return val.join(', ');
-    }
-    return val.toString().trim();
-  }
-
-  void _checkProfileCompletion() {
+  Future<void> _checkProfileCompletion() async {
     if (_member == null) return;
 
-    final fd = _member!['form_details'] as Map<String, dynamic>? ?? {};
-    
-    // Build list of missing fields (matching website logic exactly)
-    final missingFields = <Map<String, dynamic>>[];
-    for (final field in _profileFields) {
-      final key = field['key'] as String;
-      final isOnMember = field['isFieldOnMember'] as bool;
-      
-      String value;
-      if (isOnMember) {
-        value = _member![key]?.toString().trim() ?? '';
-      } else {
-        value = _resolveFieldValue(fd, key);
-      }
-      
-      if (value.isEmpty) {
-        missingFields.add(field);
-      }
+    final u = SupabaseService.currentUser;
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. If locked in local storage, never redirect!
+    if (u != null && prefs.getBool('profile_completed_${u.id}') == true) {
+      if (mounted) setState(() => _profileIncompleteBanner = false);
+      return;
     }
 
-    if (missingFields.isNotEmpty) {
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: false)),
-          ).then((_) => _loadData());
-        }
-      });
+    final fd = _member!['form_details'] as Map<String, dynamic>? ?? {};
+
+    // 2. If marked complete on Firestore document, lock it locally and return
+    if (_member!['is_profile_complete'] == true || fd['is_profile_complete'] == true) {
+      if (u != null) await prefs.setBool('profile_completed_${u.id}', true);
+      if (mounted) setState(() => _profileIncompleteBanner = false);
+      return;
+    }
+
+    // 3. Check essential fields
+    final phone = (_member!['phone'] ?? '').toString().trim();
+    final idNumber = (fd['national_id_number'] ?? fd['id_number'] ?? '').toString().trim();
+    final branch = (fd['branch'] ?? '').toString().trim();
+
+    if (phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty) {
+      if (u != null) await prefs.setBool('profile_completed_${u.id}', true);
+      if (mounted) setState(() => _profileIncompleteBanner = false);
+      return;
+    }
+
+    // If genuinely incomplete, show a non-blocking banner on Dashboard
+    if (mounted) {
+      setState(() => _profileIncompleteBanner = true);
     }
   }
 
-  void _showProfileCompletionDialog(List<Map<String, dynamic>> missingFields) {
-    // Create controllers for ONLY the missing fields
-    final controllers = <String, TextEditingController>{};
-    final genderOptions = ['Male', 'Female'];
-    final maritalOptions = ['Married', 'Single', 'Divorced', 'Widowed'];
-    final dependantsOptions = ['Yes', 'No'];
-    String? selectedGender;
-    String? selectedMarital;
-    String? selectedDependants;
+  void _selectCardTheme(int index) async {
+    // 0ms instant UI update
+    setState(() {
+      _localCardTheme = index;
+      if (_member != null) {
+        final fd = Map<String, dynamic>.from(_member!['form_details'] as Map? ?? {});
+        fd['card_theme'] = index;
+        _member!['form_details'] = fd;
+      }
+    });
 
-    for (final field in missingFields) {
-      controllers[field['key'] as String] = TextEditingController();
-    }
+    await OfflineCacheService.setPreferredTheme(index);
 
-    bool isSaving = false;
+    SupabaseService.updateCardTheme(index).catchError((e) {
+      debugPrint('Error syncing card theme: $e');
+    });
+  }
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.person_outline, color: AppColors.warning, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text('Complete Your Profile', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17))),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        border: Border.all(color: const Color(0xFFFEF3C7)),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        'You have ${missingFields.length} missing field${missingFields.length > 1 ? 's' : ''}. Please fill in below.',
-                        style: GoogleFonts.outfit(color: const Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ...missingFields.map((field) {
-                      final key = field['key'] as String;
-                      final label = field['label'] as String;
-
-                      // Gender dropdown
-                      if (key == 'gender') {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: DropdownButtonFormField<String>(
-                            value: selectedGender,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                            items: genderOptions.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                            onChanged: (val) => setStateDialog(() => selectedGender = val),
-                          ),
-                        );
-                      }
-
-                      // Marital status dropdown
-                      if (key == 'marital_status') {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: DropdownButtonFormField<String>(
-                            value: selectedMarital,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                            items: maritalOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                            onChanged: (val) => setStateDialog(() => selectedMarital = val),
-                          ),
-                        );
-                      }
-
-                      // Dependants dropdown
-                      if (key == 'dependants') {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: DropdownButtonFormField<String>(
-                            value: selectedDependants,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                            items: dependantsOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                            onChanged: (val) => setStateDialog(() => selectedDependants = val),
-                          ),
-                        );
-                      }
-
-                      // Date of birth
-                      if (key == 'date_of_birth') {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: TextField(
-                            controller: controllers[key],
-                            readOnly: true,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              hintText: 'Tap to select',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                            ),
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime(1990),
-                                firstDate: DateTime(1940),
-                                lastDate: DateTime.now(),
-                              );
-                              if (date != null) {
-                                controllers[key]!.text = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-                              }
-                            },
-                          ),
-                        );
-                      }
-
-                      // Phone field
-                      if (key == 'phone') {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: TextField(
-                            controller: controllers[key],
-                            keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              hintText: '07XX...',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                          ),
-                        );
-                      }
-
-                      // ID number fields
-                      if (key.contains('id_number') || key.contains('national_id')) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: TextField(
-                            controller: controllers[key],
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: label,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                          ),
-                        );
-                      }
-
-                      // Default text field
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: TextField(
-                          controller: controllers[key],
-                          decoration: InputDecoration(
-                            labelText: label,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Later', style: GoogleFonts.outfit(color: AppColors.textMuted)),
-                ),
-                if (isSaving)
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
-                  )
-                else
-                  ElevatedButton(
-                    onPressed: () async {
-                      setStateDialog(() => isSaving = true);
-                      try {
-                        final fd = Map<String, dynamic>.from(_member!['form_details'] as Map<String, dynamic>? ?? {});
-                        String? phone;
-
-                        for (final field in missingFields) {
-                          final key = field['key'] as String;
-                          String value = '';
-
-                          if (key == 'gender') {
-                            value = selectedGender ?? '';
-                          } else if (key == 'marital_status') {
-                            value = selectedMarital ?? '';
-                          } else if (key == 'dependants') {
-                            value = selectedDependants ?? '';
-                          } else {
-                            value = controllers[key]?.text.trim() ?? '';
-                          }
-
-                          if (key == 'phone') {
-                            phone = value;
-                          } else {
-                            fd[key] = value;
-                          }
-                        }
-
-                        final updateData = <String, dynamic>{'form_details': fd};
-                        if (phone != null && phone.isNotEmpty) {
-                          updateData['phone'] = phone;
-                        }
-
-                        await SupabaseService.updateMember(_member!['id'], updateData);
-                        if (mounted) {
-                          Navigator.pop(context);
-                          _loadData();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ Profile updated!', style: GoogleFonts.outfit()),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                          setStateDialog(() => isSaving = false);
-                        }
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text('Save Details', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600)),
-                  ),
-              ],
-            );
-          }
-        );
-      },
+  Widget _buildThemePill(int index, List<Color> colors) {
+    final isSelected = _cardTheme == index;
+    return GestureDetector(
+      onTap: () => _selectCardTheme(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: isSelected ? 30 : 24,
+        height: isSelected ? 30 : 24,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(colors: colors),
+          border: Border.all(
+            color: isSelected ? AppColors.secondary : Colors.white,
+            width: isSelected ? 2.5 : 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colors[0].withOpacity(0.35),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: isSelected
+            ? const Center(child: Icon(Icons.check, size: 12, color: Colors.white))
+            : null,
+      ),
     );
   }
 
@@ -733,7 +457,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (digits.length < 16) digits = digits.padRight(16, '0');
     return '${digits.substring(0,4)} ${digits.substring(4,8)} ${digits.substring(8,12)} ${digits.substring(12,16)}';
   }
-  int get _cardTheme => (_member?['form_details'] as Map<String, dynamic>?)?['card_theme'] as int? ?? 0;
+  int get _cardTheme => _localCardTheme ?? ((_member?['form_details'] as Map<String, dynamic>?)?['card_theme'] as int? ?? 0);
   
   String get _memberSince {
     final joinDate = _member?['join_date'];
@@ -1008,6 +732,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
 
+                      // --- Profile Completion Alert Banner (Non-blocking) ---
+                      if (_profileIncompleteBanner)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warning.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.assignment_late_rounded, color: AppColors.warning, size: 22),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Complete Membership Details',
+                                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Fill official KYC details to unlock welfare relief.',
+                                          style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      await Navigator.pushNamed(context, CompleteProfileScreen.route);
+                                      _loadData();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    child: Text('Fill Now', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
                       // --- Virtual Card ---
                       SliverToBoxAdapter(
                         child: Padding(
@@ -1030,7 +811,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   },
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
+
+                              // Instant Card Theme Selector
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Card Theme: ',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildThemePill(0, const [Color(0xFF0A2D6B), Color(0xFF0B4FBB), Color(0xFF29B6F6)]),
+                                  const SizedBox(width: 10),
+                                  _buildThemePill(1, const [Color(0xFF0891b2), Color(0xFF1e40af), Color(0xFF3730a3)]),
+                                  const SizedBox(width: 10),
+                                  _buildThemePill(2, const [Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFFD97706)]),
+                                  const SizedBox(width: 10),
+                                  _buildThemePill(3, const [Color(0xFF059669), Color(0xFF0d9488), Color(0xFF06b6d4)]),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
                               TextButton.icon(
                                 onPressed: _showDownloadOptions,
                                 icon: const Icon(Icons.download_rounded, color: AppColors.primary, size: 18),
@@ -1083,8 +889,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.download_rounded, 'Save\nCard', AppColors.skyBlue, _showDownloadOptions),
                               const SizedBox(width: 12),
-                              _buildQuickAction(Icons.settings_rounded, 'Settings', AppColors.warning, () {
-                                Navigator.pushNamed(context, SettingsScreen.route);
+                              _buildQuickAction(Icons.settings_rounded, 'Settings', AppColors.warning, () async {
+                                await Navigator.pushNamed(context, SettingsScreen.route);
+                                final updatedTheme = await OfflineCacheService.getPreferredTheme();
+                                if (mounted) {
+                                  setState(() {
+                                    _localCardTheme = updatedTheme;
+                                  });
+                                  _loadData();
+                                }
                               }),
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.notifications_rounded, 'Alerts', AppColors.red, () {
@@ -1420,6 +1233,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             childCount: _recentPayments.length,
                           ),
                         ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(height: MediaQuery.of(context).padding.bottom + 90),
+                      ),
                     ],
                   ),
                 ),

@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
 import 'complete_profile_screen.dart';
-import 'dashboard_screen.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -107,9 +106,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await SupabaseService.signUp(name, email, password);
 
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushNamedAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const CompleteProfileScreen(isMandatory: true)),
+        CompleteProfileScreen.route,
+        (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
@@ -402,6 +402,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _buildFormHeader(),
                     const SizedBox(height: 20),
                     _buildFormFields(),
+                    SizedBox(height: MediaQuery.of(context).padding.bottom + 28),
                   ],
                 ),
               ),
