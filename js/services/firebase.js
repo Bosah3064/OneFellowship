@@ -82,3 +82,4 @@ export function handleFirebaseError(error, defaultMsg = 'An error occurred.') {
       return error.message || defaultMsg;
   }
 }
+

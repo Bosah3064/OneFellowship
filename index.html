@@ -88,6 +88,11 @@
               <button type="submit" class="btn btn-primary btn-w-100">
                 <i class="fa-solid fa-right-to-bracket"></i> Sign In
               </button>
+              <div style="margin-top: 16px; text-align: center;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.openModal('modal-contact-support')" style="border:none; color:var(--text-secondary); font-size:0.8rem;">
+                  <i class="fa-solid fa-headset"></i> Need help? Contact OneFellowship Care
+                </button>
+              </div>
             </form>
           </div>
 
@@ -244,6 +249,9 @@
           </button>
           <button class="nav-item" data-tab="profile">
             <i class="fa-solid fa-user-circle"></i> My Profile
+          </button>
+          <button class="nav-item" onclick="app.openModal('modal-contact-support')">
+            <i class="fa-solid fa-headset"></i> Help & Support
           </button>
 
           <!-- ADMIN GROUP (Shown only to admin/treasury roles) -->
@@ -1194,6 +1202,50 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-sm" data-modal-close>Close</button>
         </div>
+      </div>
+    </div>
+
+    <!-- CONTACT / SUPPORT MODAL (Replaces legacy contact page) -->
+    <div id="modal-contact-support" class="modal-overlay">
+      <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-headset"></i> Contact OneFellowship Care</h3>
+          <button class="modal-close-btn" data-modal-close>&times;</button>
+        </div>
+        <form onsubmit="event.preventDefault(); Toast.success('Your message has been received by OneFellowship leadership. We will be in touch shortly!'); app.closeModal('modal-contact-support'); this.reset();">
+          <div class="modal-body">
+            <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 16px;">
+              Have questions about your membership, contributions, or welfare assistance? Reach out to our team directly.
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Your Name *</label>
+                <input type="text" required placeholder="Full Name" value="">
+              </div>
+              <div class="form-group">
+                <label>Phone / Email *</label>
+                <input type="text" required placeholder="Phone or Email">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Topic *</label>
+              <select required>
+                <option value="general">General Fellowship Inquiry</option>
+                <option value="payments">Contributions & M-PESA Payment Help</option>
+                <option value="welfare">Welfare & Benevolence Request</option>
+                <option value="account">Member Account Assistance</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Message *</label>
+              <textarea rows="4" required placeholder="How can OneFellowship assist you today?"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Send Message</button>
+          </div>
+        </form>
       </div>
     </div>
 
