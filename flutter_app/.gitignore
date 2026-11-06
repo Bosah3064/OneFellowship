@@ -1,0 +1,11 @@
+/build/
+/.dart_tool/
+.packages
+.pub/
+.idea/
+.vscode/
+**/android/**/gradle-wrapper.jar
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/engine/*
+.DS_Store

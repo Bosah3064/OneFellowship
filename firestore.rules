@@ -1,0 +1,96 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' || 
+        getUserData().role == 'superadmin'
+      );
+    }
+
+    function isExecutive() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' ||
+        getUserData().role == 'treasury' ||
+        getUserData().role == 'chairperson' ||
+        getUserData().role == 'vice_chairperson'
+      );
+    }
+
+    // =========================================================================
+    // MEMBERS COLLECTION
+    // Document ID matches the user's Firebase Auth UID
+    // =========================================================================
+    match /members/{memberId} {
+      // Any authenticated user can read basic member directory, or full details if self/admin
+      allow read: if isAuthenticated();
+
+      // Users can create their own document on sign up, or admins can create accounts
+      allow create: if isOwner(memberId) || isExecutive();
+
+      // Users can update their own personal info and form_details, but NOT their own role or status
+      // Admins and executives can update all fields
+      allow update: if isExecutive() || (
+        isOwner(memberId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])
+      );
+
+      // Only admins can delete members
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // PAYMENTS COLLECTION
+    // =========================================================================
+    match /payments/{paymentId} {
+      // Members can read their own payments; executives can read all payments
+      allow read: if isExecutive() || (
+        isAuthenticated() && resource.data.member_id == request.auth.uid
+      );
+
+      // Only treasury, admins, and executives can record, edit, or delete payments
+      allow create, update, delete: if isExecutive();
+    }
+
+    // =========================================================================
+    // NOTIFICATIONS COLLECTION
+    // =========================================================================
+    match /notifications/{notificationId} {
+      // Members can read notifications sent to 'all' or to their specific UID
+      allow read: if isAuthenticated() && (
+        resource.data.recipient == 'all' || 
+        resource.data.recipient == request.auth.uid
+      );
+
+      // Executives can broadcast and manage notifications
+      allow create, update, delete: if isExecutive();
+    }
+
+    // =========================================================================
+    // FORM SCHEMA COLLECTION (Dynamic Google Forms Profile Configuration)
+    // =========================================================================
+    match /form_schema/{schemaId} {
+      allow read: if isAuthenticated();
+      allow write: if isExecutive();
+    }
+  }
+}

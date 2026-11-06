@@ -1,0 +1,13 @@
+{
+  "name": "onefellowship-app",
+  "version": "2.0.0",
+  "description": "OneFellowship - Together We Stand",
+  "main": "index.html",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase": "^10.12.0",
+    "xlsx": "^0.18.5"
+  }
+}
