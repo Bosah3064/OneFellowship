@@ -15,12 +15,12 @@ export const CONFIG = {
   // Paste your Firebase project configuration here from the Firebase Console:
   // Firebase Console -> Project Settings -> General -> Your apps -> Web app -> SDK setup and configuration
   FIREBASE_CONFIG: {
-    apiKey: "AIzaSyYOUR_FIREBASE_API_KEY_HERE",
-    authDomain: "onefellowship-app.firebaseapp.com",
-    projectId: "onefellowship-app",
-    storageBucket: "onefellowship-app.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef1234567890abcdef"
+    apiKey: "AIzaSyB40K7B18XcsetxDuDTgvF5KoHrE264fIo",
+    authDomain: "onefellowship-1c792.firebaseapp.com",
+    projectId: "onefellowship-1c792",
+    storageBucket: "onefellowship-1c792.firebasestorage.app",
+    messagingSenderId: "612773099202",
+    appId: "1:612773099202:android:4f77f66ca552c4fd256d5b"
   },
 
   DEFAULT_PASSWORD: '12345678',
