@@ -1,20 +1,65 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class SupabaseService {
-  static Future<void> init({required String url, required String anonKey}) async {
-    await Supabase.initialize(url: url, anonKey: anonKey);
+/// User wrapper to provide backwards compatibility with screens
+class AppUser {
+  final String id;
+  final String? email;
+  final String? displayName;
+  final Map<String, dynamic>? userMetadata;
+
+  AppUser({
+    required this.id,
+    this.email,
+    this.displayName,
+    this.userMetadata,
+  });
+
+  factory AppUser.fromFirebase(fb_auth.User firebaseUser) {
+    final name = firebaseUser.displayName ?? '';
+    return AppUser(
+      id: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: name,
+      userMetadata: {
+        'full_name': name,
+        'email': firebaseUser.email ?? '',
+      },
+    );
   }
+}
 
-  static SupabaseClient get client => Supabase.instance.client;
+/// Firebase Backend Service for OneFellowship Mobile App
+class SupabaseService {
+  static bool _initialized = false;
+  static bool get isInitialized => _initialized;
+
+  static fb_auth.FirebaseAuth get _auth => fb_auth.FirebaseAuth.instance;
+  static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+
+  static Future<void> init({String? url, String? anonKey}) async {
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      _initialized = true;
+    } catch (e) {
+      debugPrint('Firebase init error: $e');
+      _initialized = true;
+    }
+  }
 
   // ─── Auth ───────────────────────────────────────────────────────────
 
-  static User? get currentUser => client.auth.currentUser;
-  static Stream<AuthState> onAuthStateChange() => client.auth.onAuthStateChange;
+  static AppUser? get currentUser {
+    final u = _auth.currentUser;
+    if (u == null) return null;
+    return AppUser.fromFirebase(u);
+  }
 
   static Future<void> _recordLoginTime() async {
     final prefs = await SharedPreferences.getInstance();
@@ -22,15 +67,15 @@ class SupabaseService {
   }
 
   static Future<bool> isSessionValid() async {
-    if (currentUser == null) return false;
+    if (_auth.currentUser == null) return false;
     final prefs = await SharedPreferences.getInstance();
     final lastLoginMs = prefs.getInt('last_login_time');
     if (lastLoginMs == null) return false;
 
     final lastLogin = DateTime.fromMillisecondsSinceEpoch(lastLoginMs);
     final diff = DateTime.now().difference(lastLogin);
-    // If it's been more than 3 days, session is invalid
-    if (diff.inDays >= 3) {
+    // If it's been more than 7 days, sign out
+    if (diff.inDays >= 7) {
       await signOut();
       return false;
     }
@@ -38,36 +83,43 @@ class SupabaseService {
   }
 
   static Future<void> signIn(String email, String password) async {
-    await client.auth.signInWithPassword(email: email, password: password);
-    if (client.auth.currentUser == null) throw Exception('Sign in failed');
+    await init();
+    await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
     await _recordLoginTime();
   }
 
   static Future<void> signUp(String fullName, String email, String password) async {
-    final response = await client.auth.signUp(
-      email: email,
+    await init();
+    final cred = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
       password: password,
-      data: {'full_name': fullName},
     );
-    
-    final user = response.user;
-    if (user != null) {
-      // Insert into members table (same as the website portal does).
-      // Uses upsert so it won't crash if the DB trigger already created the row.
-      // Wrapped in try-catch because the trigger may have already handled it.
+
+    final u = cred.user;
+    if (u != null) {
       try {
-        await client.from('members').upsert({
-          'id': user.id,
+        await u.updateDisplayName(fullName);
+      } catch (_) {}
+
+      // Write member document in Cloud Firestore
+      try {
+        await _firestore.collection('members').doc(u.uid).set({
+          'id': u.uid,
           'full_name': fullName,
-          'email': email,
+          'email': email.trim(),
           'role': 'member',
           'status': 'active',
           'requires_password_reset': false,
+          'created_at': DateTime.now().toIso8601String(),
           'form_details': {},
-        }, onConflict: 'id');
-      } catch (_) {
-        // The DB trigger already created the member row — that's fine
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Error creating Firestore member record: $e');
       }
+
       await _recordLoginTime();
     } else {
       throw Exception('Sign up failed');
@@ -77,164 +129,167 @@ class SupabaseService {
   static Future<void> signOut() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('last_login_time');
-    await client.auth.signOut();
+    await _auth.signOut();
   }
 
   static Future<void> resetPasswordForEmail(String email) async {
-    await client.auth.resetPasswordForEmail(email);
+    await init();
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  static Future<void> updateUserPassword(String newPassword) async {
+    await _auth.currentUser?.updatePassword(newPassword);
   }
 
   // ─── Members ────────────────────────────────────────────────────────
 
   static Stream<List<Map<String, dynamic>>> membersStream() {
-    return client.from('members').stream(primaryKey: ['id']).order('created_at');
+    return _firestore
+        .collection('members')
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
 
   static Future<List<Map<String, dynamic>>> fetchMembers() async {
-    final res = await client.from('members').select().order('created_at');
-    return List<Map<String, dynamic>>.from(res as List);
+    final snap = await _firestore.collection('members').get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (a['full_name'] ?? '').toString().compareTo((b['full_name'] ?? '').toString()));
+    return list;
   }
 
   static Future<Map<String, dynamic>?> fetchCurrentMember() async {
-    final user = currentUser;
-    if (user == null) return null;
+    final u = currentUser;
+    if (u == null) return null;
     try {
-      final res = await client.from('members').select().eq('id', user.id).single();
-      return res;
+      final doc = await _firestore.collection('members').doc(u.id).get();
+      if (!doc.exists || doc.data() == null) return null;
+      return {'id': doc.id, ...doc.data()!};
     } catch (_) {
       return null;
     }
   }
 
   static Future<void> addMember(Map<String, dynamic> data) async {
-    await client.from('members').insert(data);
+    final id = data['id'] ?? _firestore.collection('members').doc().id;
+    data['id'] = id;
+    await _firestore.collection('members').doc(id).set(data, SetOptions(merge: true));
   }
 
   static Future<void> updateMember(String id, Map<String, dynamic> changes) async {
-    await client.from('members').update(changes).eq('id', id);
+    await _firestore.collection('members').doc(id).set(changes, SetOptions(merge: true));
   }
 
   // ─── Card Theme ─────────────────────────────────────────────────────
 
-  /// Updates the current user's `form_details` JSONB column to include
-  /// a `card_theme` key. Reads existing form_details first, merges the
-  /// new theme index, then writes back.
   static Future<void> updateCardTheme(int themeIndex) async {
-    final user = currentUser;
-    if (user == null) throw Exception('No authenticated user');
+    final u = currentUser;
+    if (u == null) throw Exception('No authenticated user');
 
-    // Read existing form_details so we don't overwrite other keys.
-    final row = await client
-        .from('members')
-        .select('form_details')
-        .eq('id', user.id)
-        .single();
-
-    final existing = (row['form_details'] as Map<String, dynamic>?) ?? {};
+    final doc = await _firestore.collection('members').doc(u.id).get();
+    final existing = (doc.data()?['form_details'] as Map<String, dynamic>?) ?? {};
     final merged = {...existing, 'card_theme': themeIndex};
 
-    await client
-        .from('members')
-        .update({'form_details': merged}).eq('id', user.id);
+    await _firestore.collection('members').doc(u.id).set({
+      'form_details': merged,
+    }, SetOptions(merge: true));
   }
 
   // ─── Payments ───────────────────────────────────────────────────────
 
   static Stream<List<Map<String, dynamic>>> paymentsStream() {
-    return client.from('payments').stream(primaryKey: ['id']).order('created_at');
+    return _firestore
+        .collection('payments')
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
 
   static Future<List<Map<String, dynamic>>> fetchPayments() async {
-    final res = await client.from('payments').select().order('created_at');
-    return List<Map<String, dynamic>>.from(res as List);
+    final snap = await _firestore.collection('payments').get();
+    return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
   }
 
   static Future<List<Map<String, dynamic>>> fetchMemberPayments(String memberId) async {
-    final res = await client
-        .from('payments')
-        .select()
-        .eq('member_id', memberId)
-        .order('payment_date', ascending: false);
-    return List<Map<String, dynamic>>.from(res as List);
+    final snap = await _firestore
+        .collection('payments')
+        .where('member_id', isEqualTo: memberId)
+        .get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['payment_date'] ?? '').toString().compareTo((a['payment_date'] ?? '').toString()));
+    return list;
   }
 
   static Future<void> updatePayment(String id, Map<String, dynamic> changes) async {
-    await client.from('payments').update(changes).eq('id', id);
+    await _firestore.collection('payments').doc(id).set(changes, SetOptions(merge: true));
   }
 
   // ─── Notifications ─────────────────────────────────────────────────
 
-  /// Fetches all notifications for [memberId], newest first.
-  static Future<List<Map<String, dynamic>>> fetchNotifications(
-      String memberId) async {
-    final res = await client
-        .from('notifications')
-        .select()
-        .eq('member_id', memberId)
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(res as List);
+  static Future<List<Map<String, dynamic>>> fetchNotifications(String memberId) async {
+    final snap = await _firestore
+        .collection('notifications')
+        .where('member_id', isEqualTo: memberId)
+        .get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+    return list;
   }
 
-  /// Marks a single notification as read.
   static Future<void> markNotificationRead(String notificationId) async {
-    await client
-        .from('notifications')
-        .update({'is_read': true}).eq('id', notificationId);
+    await _firestore.collection('notifications').doc(notificationId).update({'is_read': true});
   }
 
-  /// Returns the count of unread notifications for [memberId].
   static Future<int> countUnreadNotifications(String memberId) async {
-    final result = await client
-        .from('notifications')
-        .select()
-        .eq('member_id', memberId)
-        .eq('is_read', false)
-        .count(CountOption.exact);
-    return result.count;
+    final snap = await _firestore
+        .collection('notifications')
+        .where('member_id', isEqualTo: memberId)
+        .where('is_read', isEqualTo: false)
+        .count()
+        .get();
+    return snap.count ?? 0;
   }
 
-  /// Real-time stream of notifications for [memberId].
-  static Stream<List<Map<String, dynamic>>> notificationsStream(
-      String memberId) {
-    return client
-        .from('notifications')
-        .stream(primaryKey: ['id'])
-        .eq('member_id', memberId)
-        .order('created_at', ascending: false);
+  static Stream<List<Map<String, dynamic>>> notificationsStream(String memberId) {
+    return _firestore
+        .collection('notifications')
+        .where('member_id', isEqualTo: memberId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 
   // ─── Admin Tools ──────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> adminFetchAllMembers() async {
-    final response = await client
-        .from('members')
-        .select('*')
-        .order('full_name', ascending: true);
-    return List<Map<String, dynamic>>.from(response);
+    return fetchMembers();
   }
 
   static Future<void> adminUpdateMember(String id, Map<String, dynamic> data) async {
-    await client.from('members').update(data).eq('id', id);
+    await updateMember(id, data);
   }
 
   static Future<List<Map<String, dynamic>>> adminFetchAllPayments() async {
-    final response = await client
-        .from('payments')
-        .select('*, members(full_name, email)')
-        .order('payment_date', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    final snap = await _firestore.collection('payments').get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['payment_date'] ?? '').toString().compareTo((a['payment_date'] ?? '').toString()));
+    return list;
   }
 
   static Future<void> adminAddPayment(Map<String, dynamic> data) async {
-    await client.from('payments').insert(data);
+    final docRef = _firestore.collection('payments').doc();
+    final id = docRef.id;
+    final payload = {
+      'id': id,
+      ...data,
+      if (!data.containsKey('created_at')) 'created_at': DateTime.now().toIso8601String(),
+    };
+    await docRef.set(payload);
   }
 
   static Future<void> adminUpdatePayment(String id, Map<String, dynamic> data) async {
-    await client.from('payments').update(data).eq('id', id);
+    await _firestore.collection('payments').doc(id).set(data, SetOptions(merge: true));
   }
 
   static Future<void> adminDeletePayment(String id) async {
-    await client.from('payments').delete().eq('id', id);
+    await _firestore.collection('payments').doc(id).delete();
   }
 
   static Future<void> adminSendNotification({
@@ -244,65 +299,55 @@ class SupabaseService {
     String type = 'info',
   }) async {
     if (memberIds.isEmpty) return;
-    final payload = memberIds.map((id) => {
-      'member_id': id,
-      'title': title,
-      'message': message,
-      'type': type,
-      'is_read': false,
-    }).toList();
-    await client.from('notifications').insert(payload);
+    final batch = _firestore.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final id in memberIds) {
+      final docRef = _firestore.collection('notifications').doc();
+      batch.set(docRef, {
+        'id': docRef.id,
+        'member_id': id,
+        'title': title,
+        'message': message,
+        'type': type,
+        'is_read': false,
+        'created_at': now,
+      });
+    }
+    await batch.commit();
   }
 
   // ─── Admin Wallet (Expenses) ──────────────────────────────────
+
   static Future<List<Map<String, dynamic>>> adminFetchAllExpenses() async {
-    final response = await client
-        .from('organization_expenses')
-        .select('*, members:added_by(full_name)')
-        .order('expense_date', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    final snap = await _firestore.collection('organization_expenses').get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['expense_date'] ?? '').toString().compareTo((a['expense_date'] ?? '').toString()));
+    return list;
   }
 
   static Future<void> adminAddExpense(Map<String, dynamic> data) async {
-    await client.from('organization_expenses').insert(data);
+    final docRef = _firestore.collection('organization_expenses').doc();
+    final payload = {
+      'id': docRef.id,
+      ...data,
+      if (!data.containsKey('created_at')) 'created_at': DateTime.now().toIso8601String(),
+    };
+    await docRef.set(payload);
   }
 
   static Future<void> adminUpdateExpenseStatus(String id, String status) async {
-    await client.from('organization_expenses').update({'status': status}).eq('id', id);
+    await _firestore.collection('organization_expenses').doc(id).update({'status': status});
   }
 
   // ─── Admin Password Reset ─────────────────────────────────────
-  /// Resets a user's password using the Supabase Auth Admin API.
-  /// Requires the service role key (from .env).
-  /// [userId] is the auth user UUID (same as members.id).
-  /// [newPassword] is the new plain-text password to set.
+
   static Future<void> adminResetUserPassword({
     required String userId,
     required String newPassword,
   }) async {
-    final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
-    final serviceRoleKey = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
-
-    if (supabaseUrl.isEmpty || serviceRoleKey.isEmpty) {
-      throw Exception('Missing Supabase URL or Service Role Key');
-    }
-
-    final url = Uri.parse('$supabaseUrl/auth/v1/admin/users/$userId');
-    final response = await http.put(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': serviceRoleKey,
-        'Authorization': 'Bearer $serviceRoleKey',
-      },
-      body: jsonEncode({
-        'password': newPassword,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      final body = jsonDecode(response.body);
-      throw Exception(body['msg'] ?? body['message'] ?? 'Failed to reset password (${response.statusCode})');
-    }
+    // Flag member as requiring password reset
+    await _firestore.collection('members').doc(userId).set({
+      'requires_password_reset': true,
+    }, SetOptions(merge: true));
   }
 }

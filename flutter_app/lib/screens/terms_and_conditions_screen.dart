@@ -106,8 +106,8 @@ class TermsAndConditionsScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _buildPolicyCard(
               title: 'Monthly Contribution',
-              amount: 'Min. KES 200',
-              description: 'Members are required to make a minimum monthly contribution of KES 200 to remain active and support the initiative.',
+              amount: 'Min. KES 500',
+              description: 'Members are required to make a minimum monthly contribution of KES 500 to remain active and support the initiative.',
               icon: Icons.calendar_month_rounded,
               color: AppColors.success,
             ),

@@ -728,6 +728,12 @@ class App {
         const email = document.getElementById('reg-email').value;
         const phone = document.getElementById('reg-phone').value;
         const password = document.getElementById('reg-password').value;
+        const confirmPassword = document.getElementById('reg-confirm-password')?.value;
+
+        if (confirmPassword && password !== confirmPassword) {
+          Toast.error('Passwords do not match. Please re-enter.');
+          return;
+        }
 
         const formDetails = {
           date_of_birth: document.getElementById('reg-dob')?.value || '',
@@ -761,6 +767,70 @@ class App {
           btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Complete Registration';
         }
       };
+    }
+
+    // Live password strength indicator for registration
+    const regPasswordInput = document.getElementById('reg-password');
+    const regConfirmInput = document.getElementById('reg-confirm-password');
+    const regStrengthMeter = document.getElementById('reg-strength-meter');
+    const regStrengthText = document.getElementById('reg-strength-text');
+    const regMatchText = document.getElementById('reg-match-text');
+
+    if (regPasswordInput && regStrengthMeter) {
+      regPasswordInput.addEventListener('input', () => {
+        const val = regPasswordInput.value;
+        if (!val) {
+          regStrengthMeter.style.width = '0%';
+          regStrengthMeter.style.background = '#e0e0e0';
+          if (regStrengthText) regStrengthText.textContent = '';
+          return;
+        }
+        let score = 0;
+        if (val.length >= 6) score++;
+        if (val.length >= 8) score++;
+        if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+        if (/[0-9]/.test(val)) score++;
+        if (/[^A-Za-z0-9]/.test(val)) score++;
+
+        if (score <= 2) {
+          regStrengthMeter.style.width = '33%';
+          regStrengthMeter.style.background = '#E53935';
+          if (regStrengthText) {
+            regStrengthText.textContent = 'Weak password';
+            regStrengthText.style.color = '#E53935';
+          }
+        } else if (score <= 3) {
+          regStrengthMeter.style.width = '66%';
+          regStrengthMeter.style.background = '#FB8C00';
+          if (regStrengthText) {
+            regStrengthText.textContent = 'Medium password';
+            regStrengthText.style.color = '#FB8C00';
+          }
+        } else {
+          regStrengthMeter.style.width = '100%';
+          regStrengthMeter.style.background = '#28A745';
+          if (regStrengthText) {
+            regStrengthText.textContent = 'Strong password';
+            regStrengthText.style.color = '#28A745';
+          }
+        }
+      });
+    }
+
+    if (regConfirmInput && regMatchText) {
+      regConfirmInput.addEventListener('input', () => {
+        if (!regConfirmInput.value) {
+          regMatchText.textContent = '';
+          return;
+        }
+        if (regConfirmInput.value === regPasswordInput?.value) {
+          regMatchText.textContent = '✓ Passwords match';
+          regMatchText.style.color = '#28A745';
+        } else {
+          regMatchText.textContent = '✗ Passwords do not match';
+          regMatchText.style.color = '#E53935';
+        }
+      });
     }
 
     // RESET PASSWORD REQUEST FORM

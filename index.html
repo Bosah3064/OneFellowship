@@ -24,17 +24,42 @@
     <!-- AUTHENTICATION VIEW (LOGIN / REGISTER / FORGOT PASSWORD)             -->
     <!-- ==================================================================== -->
     <div id="view-auth" class="auth-wrapper" style="display: none;">
-      <div class="auth-card" id="auth-card-main">
+      <div class="auth-card-split" id="auth-card-main">
         
-        <!-- Brand Header -->
-        <div class="auth-header">
-          <img src="assets/logo.png" alt="OneFellowship Logo" class="auth-logo">
-          <h2>OneFellowship</h2>
-          <div class="auth-tagline">TOGETHER WE STAND</div>
-          <p class="auth-sub">Welfare Management & Member Portal</p>
+        <!-- Left Side: Branded Visual Card with logo, colors & features -->
+        <div class="auth-brand-side">
+          <div class="auth-brand-content">
+            <div class="auth-logo-badge">
+              <img src="assets/logo.png" alt="OneFellowship Logo" class="auth-logo-img">
+            </div>
+            <h2 class="auth-brand-title">OneFellowship</h2>
+            <div class="auth-brand-tagline">TOGETHER WE STAND</div>
+            <p class="auth-brand-desc">
+              Empowering members through structured welfare savings, official digital membership cards, and transparent community stewardship.
+            </p>
+            <div class="auth-features-list">
+              <div class="auth-feature-item">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Enterprise Firebase Cloud Security</span>
+              </div>
+              <div class="auth-feature-item">
+                <i class="fa-solid fa-id-card"></i>
+                <span>Digital Virtual Membership Card</span>
+              </div>
+              <div class="auth-feature-item">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+                <span>Transparent Welfare & Savings Ledger</span>
+              </div>
+              <div class="auth-feature-item">
+                <i class="fa-solid fa-bell"></i>
+                <span>Instant Fellowship Announcements</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="auth-body">
+        <!-- Right Side: Clean Form Panel with Tabs -->
+        <div class="auth-form-side">
           <!-- Auth Tabs -->
           <div class="auth-nav-tabs">
             <button class="auth-tab-btn active" id="tab-btn-login" onclick="app.switchAuthTab('login')">
@@ -121,10 +146,17 @@
                 <div class="form-group">
                   <label for="reg-password">Create Password *</label>
                   <input type="password" id="reg-password" required minlength="6" placeholder="Min 6 characters">
+                  <div id="reg-strength-meter" style="height: 4px; border-radius: 2px; margin-top: 6px; background: #e0e0e0; transition: all 0.3s;"></div>
+                  <small id="reg-strength-text" style="font-size: 11px; color: #757575; display: block; margin-top: 2px;"></small>
                 </div>
               </div>
 
               <div class="form-row">
+                <div class="form-group">
+                  <label for="reg-confirm-password">Confirm Password *</label>
+                  <input type="password" id="reg-confirm-password" required minlength="6" placeholder="Re-enter password">
+                  <small id="reg-match-text" style="font-size: 11px; display: block; margin-top: 2px;"></small>
+                </div>
                 <div class="form-group">
                   <label for="reg-dob">Date of Birth</label>
                   <input type="date" id="reg-dob">
@@ -574,7 +606,7 @@
                   </div>
                   <div class="form-group">
                     <label for="pay-amount">Amount (KES) *</label>
-                    <input type="number" id="pay-amount" required placeholder="200" min="1" value="200">
+                    <input type="number" id="pay-amount" required placeholder="500" min="1" value="500">
                   </div>
                 </div>
 

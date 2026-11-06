@@ -25,7 +25,7 @@ export const CONFIG = {
 
   DEFAULT_PASSWORD: '12345678',
   REGISTRATION_FEE: 600,
-  DEFAULT_MONTHLY_SAVING: 200,
+  DEFAULT_MONTHLY_SAVING: 500,
   ADMIN_ROLES: ['admin', 'treasury', 'chairperson', 'vice_chairperson'],
 
   // App Theme Colors (CSS Variables)

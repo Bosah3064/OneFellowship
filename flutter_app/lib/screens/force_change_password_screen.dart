@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import '../app_colors.dart';
 import 'dashboard_screen.dart';
@@ -45,17 +44,15 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Update password using Supabase Auth
-      await SupabaseService.client.auth.updateUser(
-        UserAttributes(password: password),
-      );
+      // Update password using Firebase Auth
+      await SupabaseService.updateUserPassword(password);
 
       // Update members table flag
       final user = SupabaseService.currentUser;
       if (user != null) {
-        await SupabaseService.client.from('members').update({
+        await SupabaseService.updateMember(user.id, {
           'requires_password_reset': false
-        }).eq('id', user.id);
+        });
       }
 
       if (!mounted) return;

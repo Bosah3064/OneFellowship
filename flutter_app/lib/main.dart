@@ -31,20 +31,15 @@ void main() async {
     debugPrint('dotenv load error: $e');
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
-  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-
   String initRoute = WelcomeScreen.route;
-  if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    try {
-      await SupabaseService.init(url: supabaseUrl, anonKey: supabaseAnonKey);
-      final valid = await SupabaseService.isSessionValid();
-      if (valid) {
-        initRoute = DashboardScreen.route;
-      }
-    } catch (e) {
-      debugPrint('Supabase init error: $e');
+  try {
+    await SupabaseService.init();
+    final valid = await SupabaseService.isSessionValid();
+    if (valid) {
+      initRoute = DashboardScreen.route;
     }
+  } catch (e) {
+    debugPrint('Firebase backend init error: $e');
   }
   runApp(OneFellowshipApp(initialRoute: initRoute));
 }
