@@ -62,7 +62,7 @@ class TermsAndConditionsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Welcome to\nGlamorous Care',
+                    'Welcome to\nOneFellowship',
                     style: GoogleFonts.outfit(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,

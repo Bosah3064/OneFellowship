@@ -1,11 +1,11 @@
 {
-    "name": "Glamorous Care Initiative",
-    "short_name": "Glamorous Care",
+    "name": "OneFellowship",
+    "short_name": "OneFellowship",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Glamorous Care Initiative member portal app for payments and administration.",
+    "description": "OneFellowship member portal app for payments and administration.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

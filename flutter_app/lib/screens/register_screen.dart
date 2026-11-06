@@ -163,7 +163,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Join Glamorous Care Initiative today.\nComplete your profile after signing up.',
+                      'Join OneFellowship today.\nComplete your profile after signing up.',
                       style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w400, color: Colors.grey.shade500, height: 1.5),
                     ),
 

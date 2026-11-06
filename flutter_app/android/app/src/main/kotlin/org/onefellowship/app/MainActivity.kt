@@ -1,4 +1,4 @@
-package com.example.glamorous_care_app
+package org.onefellowship.app
 
 import io.flutter.embedding.android.FlutterActivity
 

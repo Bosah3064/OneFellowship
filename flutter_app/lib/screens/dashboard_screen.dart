@@ -94,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final user = SupabaseService.currentUser;
           if (user != null) {
             String name = (user.userMetadata?['full_name'] ?? 'Member').toString().split(' ').first;
-            await tts.speak("Welcome back, $name. To the Glamorous Care Initiative.");
+            await tts.speak("Welcome back, $name. To OneFellowship.");
           }
         }
         _hasPlayedGreeting = true;
@@ -596,7 +596,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final directory = await getApplicationDocumentsDirectory();
         final imagePath = await File('${directory.path}/virtual_card.png').create();
         await imagePath.writeAsBytes(image);
-        await Share.shareXFiles([XFile(imagePath.path)], text: 'My Glamorous Care Virtual Card');
+        await Share.shareXFiles([XFile(imagePath.path)], text: 'My OneFellowship Virtual Card');
       }
     } catch (e) {
       debugPrint('Error sharing card image: $e');
@@ -624,7 +624,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/virtual_card.pdf');
         await file.writeAsBytes(await pdf.save());
-        await Share.shareXFiles([XFile(file.path)], text: 'My Glamorous Care Virtual Card (PDF)');
+        await Share.shareXFiles([XFile(file.path)], text: 'My OneFellowship Virtual Card (PDF)');
       }
     } catch (e) {
       debugPrint('Error sharing card pdf: $e');

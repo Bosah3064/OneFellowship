@@ -1,22 +1,22 @@
-Glamorous Care - Flutter App (Skeleton)
+# OneFellowship - Mobile App
 
-This is a minimal starter for a Flutter companion app that mirrors the website UI.
+OneFellowship - Together We Stand (Android & iOS)
 
-Getting started:
+## Getting Started:
+1. Built with Flutter & Firebase
+2. Uses Firebase Auth and Firestore database
+3. Android package: `org.onefellowship.app`
 
-1. Install Flutter: https://flutter.dev/docs/get-started/install
-2. Open this folder in VS Code or Android Studio.
-3. Add your `assets/logo.png` into `flutter_app/assets/`.
-4. Update `lib/main.dart` and initialize Supabase with your keys (or use environment variables).
-
-Run:
-
+## Run:
 ```bash
 cd flutter_app
 flutter pub get
 flutter run
 ```
 
-Notes:
-- The app uses the website's primary color palette. Replace the placeholder Supabase init with your keys.
-- For production, set up CI/CD and code signing for iOS/Android.
+## Build APK:
+```bash
+cd flutter_app
+flutter build apk --release
+```
+Output: `build/app/outputs/flutter-apk/app-release.apk`

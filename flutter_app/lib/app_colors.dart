@@ -20,6 +20,9 @@ class AppColors {
   static const success = Color(0xFF28A745);
   static const warning = Color(0xFFFB8C00);
   static const error = Color(0xFFE53935);
+  static const danger = Color(0xFFE53935);
+  static const red = Color(0xFFE53935);
+  static const purple = Color(0xFF8E24AA);
   
   // Card gradient
   static const cardGradient = LinearGradient(

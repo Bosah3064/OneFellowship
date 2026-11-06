@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "glamorous_care_app" "\0"
+            VALUE "FileDescription", "one_fellowship" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "glamorous_care_app" "\0"
+            VALUE "InternalName", "one_fellowship" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "glamorous_care_app.exe" "\0"
-            VALUE "ProductName", "glamorous_care_app" "\0"
+            VALUE "OriginalFilename", "one_fellowship.exe" "\0"
+            VALUE "ProductName", "one_fellowship" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

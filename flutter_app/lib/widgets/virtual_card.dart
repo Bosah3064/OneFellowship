@@ -131,7 +131,7 @@ class VirtualCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'GLAMOROUS CARE',
+                                'ONEFELLOWSHIP',
                                 style: GoogleFonts.inter(
                                   color: Colors.white,
                                   fontSize: 12,

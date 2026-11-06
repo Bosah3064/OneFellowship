@@ -67,7 +67,6 @@ class OneFellowshipApp extends StatelessWidget {
           primary: AppColors.primary,
           secondary: AppColors.secondary,
           error: AppColors.danger,
-          background: AppColors.background,
         ),
         textTheme: GoogleFonts.outfitTextTheme(ThemeData.light().textTheme),
         appBarTheme: AppBarTheme(

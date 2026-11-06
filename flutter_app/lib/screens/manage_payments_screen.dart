@@ -266,7 +266,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
       final file = File('${dir.path}/payments_export.csv');
       await file.writeAsString(rows.join('\n'));
       await Share.shareXFiles([XFile(file.path)],
-          text: 'Glamorous Care Payments Export');
+          text: 'OneFellowship Payments Export');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

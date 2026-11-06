@@ -67,7 +67,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       final file = File('${directory.path}/members_export.csv');
       await file.writeAsString(csvString);
       
-      await Share.shareXFiles([XFile(file.path)], text: 'Glamorous Care Members Export');
+      await Share.shareXFiles([XFile(file.path)], text: 'OneFellowship Members Export');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export error: $e')));
     }

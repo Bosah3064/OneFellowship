@@ -76,7 +76,7 @@ class WelcomeScreen extends StatelessWidget {
 
                   // ── Title ──
                   Text(
-                    'Glamorous Care',
+                    'OneFellowship',
                     style: GoogleFonts.outfit(
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
@@ -87,12 +87,12 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Initiative',
+                    'Together We Stand',
                     style: GoogleFonts.outfit(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w300,
-                      color: Colors.white.withOpacity(0.85),
-                      letterSpacing: 4,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFFFFC107),
+                      letterSpacing: 2,
                     ),
                   ),
 
