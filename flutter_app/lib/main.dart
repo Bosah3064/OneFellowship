@@ -137,11 +137,22 @@ class OneFellowshipApp extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 28),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
             textStyle: GoogleFonts.outfit(
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+            textStyle: GoogleFonts.outfit(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

@@ -353,17 +353,19 @@ class _ManageNotificationsScreenState extends State<ManageNotificationsScreen> {
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.of(context).padding.bottom),
                   child: SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: 54,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _selectedMemberIds.isEmpty ? Colors.grey : AppColors.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                        elevation: 0,
                       ),
                       onPressed: _selectedMemberIds.isEmpty ? null : _sendNotification,
-                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
                       label: Text(
                         'Send to ${_selectedMemberIds.length} Members',
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16, height: 1.1),
                       ),
                     ),
                   ),

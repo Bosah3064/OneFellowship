@@ -1601,7 +1601,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
             children: [
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 54,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _bulkSelectedIds.isEmpty
@@ -1609,6 +1609,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                         : AppColors.primary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     elevation: 0,
                   ),
                   onPressed:
@@ -1622,14 +1623,15 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15),
+                        fontSize: 15,
+                        height: 1.1),
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 54,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _bulkSelectedIds.isEmpty
@@ -1637,6 +1639,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                         : AppColors.primary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     elevation: 0,
                   ),
                   onPressed:
@@ -1648,7 +1651,8 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15),
+                        fontSize: 15,
+                        height: 1.1),
                   ),
                 ),
               ),

@@ -486,12 +486,13 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                         // OPEN BOOK BUTTON (Full width, generous, never squeezed)
                         SizedBox(
                           width: double.infinity,
-                          height: 54,
+                          height: 56,
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFD4AF37),
                               foregroundColor: const Color(0xFF0B192C),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                               elevation: 8,
                               shadowColor: const Color(0xFFD4AF37).withOpacity(0.5),
                             ),
@@ -512,6 +513,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 1.0,
+                                    height: 1.1,
                                   ),
                                 ),
                               ],
@@ -749,7 +751,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
 
         // Un-Squeezed Turn Page Navigation Footer
         Container(
-          padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + MediaQuery.of(context).padding.bottom),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.of(context).padding.bottom),
           color: const Color(0xFF0F172A),
           child: Row(
             children: [
@@ -757,34 +759,36 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
               if (_currentPage > 0)
                 Expanded(
                   child: SizedBox(
-                    height: 48,
+                    height: 52,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
                         side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                       ),
                       onPressed: () {
                         _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
                       },
                       icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                      label: Text('Prev Page', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                      label: Text('Prev Page', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, height: 1.1)),
                     ),
                   ),
                 )
               else
                 Expanded(
                   child: SizedBox(
-                    height: 48,
+                    height: 52,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white70,
                         side: const BorderSide(color: Colors.white24),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                       ),
                       onPressed: () => setState(() => _isBookOpen = false),
                       icon: const Icon(Icons.book_rounded, size: 18),
-                      label: Text('Cover Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+                      label: Text('Cover Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14, height: 1.1)),
                     ),
                   ),
                 ),
@@ -795,41 +799,42 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
               if (_currentPage < _totalPages - 1)
                 Expanded(
                   child: SizedBox(
-                    height: 48,
+                    height: 52,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFD4AF37),
                         foregroundColor: const Color(0xFF0F172A),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                         elevation: 0,
                       ),
                       onPressed: () {
                         _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
                       },
                       icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                      label: Text('Next Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14)),
+                      label: Text('Next Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14, height: 1.1)),
                     ),
                   ),
                 )
               else
                 Expanded(
                   child: SizedBox(
-                    height: 48,
+                    height: 52,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                         elevation: 0,
                       ),
                       onPressed: () {
-                        // Action for final page
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Please check the agreement box below to complete ratification.')),
                         );
                       },
                       icon: const Icon(Icons.check_circle_rounded, size: 18),
-                      label: Text('Ratify & Agree', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14)),
+                      label: Text('Ratify & Agree', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14, height: 1.1)),
                     ),
                   ),
                 ),
