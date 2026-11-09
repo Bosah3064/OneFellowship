@@ -1623,8 +1623,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        height: 1.1),
+                        fontSize: 15),
                   ),
                 ),
               ),
@@ -1651,8 +1650,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        height: 1.1),
+                        fontSize: 15),
                   ),
                 ),
               ),

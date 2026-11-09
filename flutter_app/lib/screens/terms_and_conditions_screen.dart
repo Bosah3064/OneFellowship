@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
+import 'dashboard_screen.dart';
 
 class TermsAndConditionsScreen extends StatefulWidget {
   static const String route = '/terms-and-conditions';
@@ -22,7 +23,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
   bool _isBookOpen = false;
   bool _continuousScrollMode = false;
   int _currentPage = 0;
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
 
   final int _totalPages = 9;
 
@@ -41,6 +42,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: 0);
     _loadAgreementStatus();
   }
 
@@ -66,24 +68,30 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
             });
           }
         } else {
-          final member = await SupabaseService.fetchCurrentMember();
-          if (member != null && mounted) {
-            final fd = (member['form_details'] as Map<String, dynamic>?) ?? {};
-            final cloudAgreed = (fd['agreed_to_welfare_rules'] == true) ||
-                (member['agreed_to_welfare_rules'] == true);
-            final cloudDate = (fd['welfare_rules_agreed_at'] ?? member['welfare_rules_agreed_at'])?.toString();
+          // Non-blocking fetch with quick timeout
+          try {
+            final member = await SupabaseService.fetchCurrentMember().timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => null,
+            );
+            if (member != null && mounted) {
+              final fd = (member['form_details'] as Map<String, dynamic>?) ?? {};
+              final cloudAgreed = (fd['agreed_to_welfare_rules'] == true) ||
+                  (member['agreed_to_welfare_rules'] == true);
+              final cloudDate = (fd['welfare_rules_agreed_at'] ?? member['welfare_rules_agreed_at'])?.toString();
 
-            if (cloudAgreed) {
-              setState(() {
-                _hasAgreed = true;
-                _agreedAtDate = cloudDate;
-              });
-              await prefs.setBool('welfare_rules_agreed_${user.id}', true);
-              if (cloudDate != null) {
-                await prefs.setString('welfare_rules_agreed_date_${user.id}', cloudDate);
+              if (cloudAgreed) {
+                setState(() {
+                  _hasAgreed = true;
+                  _agreedAtDate = cloudDate;
+                });
+                await prefs.setBool('welfare_rules_agreed_${user.id}', true);
+                if (cloudDate != null) {
+                  await prefs.setString('welfare_rules_agreed_date_${user.id}', cloudDate);
+                }
               }
             }
-          }
+          } catch (_) {}
         }
       }
     } catch (e) {
@@ -91,72 +99,251 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
     }
   }
 
-  Future<void> _toggleAgreement(bool? value) async {
-    final newValue = value ?? false;
-    final user = SupabaseService.currentUser;
-
-    if (user == null) {
+  /// Permanently ratifies and locks the constitution agreement.
+  Future<void> _performRatification() async {
+    if (_hasAgreed) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            newValue
-                ? 'Agreed! Please log in to permanently record your signature.'
-                : 'Agreement unchecked.',
-            style: GoogleFonts.outfit(),
+          content: Row(
+            children: [
+              const Icon(Icons.lock_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Constitution is already signed, ratified, and locked.',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
-          backgroundColor: AppColors.primary,
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
-      setState(() => _hasAgreed = newValue);
       return;
     }
 
     setState(() => _isSavingAgreement = true);
-    try {
-      final nowStr = DateTime.now().toIso8601String();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('welfare_rules_agreed_${user.id}', newValue);
-      if (newValue) {
-        await prefs.setString('welfare_rules_agreed_date_${user.id}', nowStr);
-      } else {
-        await prefs.remove('welfare_rules_agreed_date_${user.id}');
-      }
+    final nowStr = DateTime.now().toIso8601String();
+    final user = SupabaseService.currentUser;
 
-      await SupabaseService.updateMember(user.id, {
-        'agreed_to_welfare_rules': newValue,
-        'welfare_rules_agreed_at': newValue ? nowStr : null,
-        'form_details.agreed_to_welfare_rules': newValue,
-        'form_details.welfare_rules_agreed_at': newValue ? nowStr : null,
-      });
+    try {
+      if (user != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('welfare_rules_agreed_${user.id}', true);
+        await prefs.setString('welfare_rules_agreed_date_${user.id}', nowStr);
+
+        // Background update to cloud
+        SupabaseService.updateMember(user.id, {
+          'agreed_to_welfare_rules': true,
+          'welfare_rules_agreed_at': nowStr,
+          'form_details.agreed_to_welfare_rules': true,
+          'form_details.welfare_rules_agreed_at': nowStr,
+        }).catchError((e) {
+          debugPrint('Cloud sync error (locally cached): $e');
+        });
+
+        // Audit log trail
+        SupabaseService.logAuditEvent(
+          action: 'CONSTITUTION_RATIFIED',
+          title: 'Constitution Ratified & Signed',
+          description: 'Member officially signed and ratified the OneFellowship Constitution under 1st Corinthians 14:40.',
+          category: 'governance',
+          performedBy: user.email ?? 'Member',
+          performedById: user.id,
+        ).catchError((_) {});
+      }
 
       if (mounted) {
         setState(() {
-          _hasAgreed = newValue;
-          _agreedAtDate = newValue ? nowStr : null;
+          _hasAgreed = true;
+          _agreedAtDate = nowStr;
+          _isSavingAgreement = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              newValue
-                  ? '✅ You have officially accepted the Benevolent Welfare Constitution.'
-                  : '⚠️ Agreement status updated.',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+        // Celebratory Ratification Modal with Return to Home option
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogCtx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            backgroundColor: const Color(0xFFFAF7F0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Branded Seal
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF0F172A),
+                    border: Border.all(color: const Color(0xFFD4AF37), width: 2.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFD4AF37).withOpacity(0.4),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.verified_rounded,
+                        color: Color(0xFFD4AF37),
+                        size: 36,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Ratification Sealed & Locked!',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cinzel(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '“Let all things be done decently and in order.”\n— 1st Corinthians 14:40',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 12.5,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF78350F),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF059669)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_rounded, color: Color(0xFF059669), size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Your digital covenant has been permanently locked and recorded. You can still freely view all pages.',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: const Color(0xFF065F46),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Direct Return to Home button
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: const Color(0xFFD4AF37),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 2,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(dialogCtx);
+                      _returnToHome();
+                    },
+                    icon: const Icon(Icons.home_rounded, color: Color(0xFFD4AF37), size: 20),
+                    label: Text(
+                      'Done • Return to Home Page',
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    'Continue Browsing Constitution',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: newValue ? AppColors.success : AppColors.warning,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
     } catch (e) {
       debugPrint('Error saving agreement: $e');
-      if (mounted) {
-        setState(() => _hasAgreed = newValue);
-      }
-    } finally {
       if (mounted) setState(() => _isSavingAgreement = false);
     }
+  }
+
+  /// Directs user back to the Home page or pops to prior screen cleanly
+  void _returnToHome() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, true);
+    } else {
+      Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
+    }
+  }
+
+  void _goToNextPage() {
+    if (_currentPage < _totalPages - 1) {
+      final next = _currentPage + 1;
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        setState(() => _currentPage = next);
+      }
+    }
+  }
+
+  void _goToPrevPage() {
+    if (_currentPage > 0) {
+      final prev = _currentPage - 1;
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          prev,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        setState(() => _currentPage = prev);
+      }
+    } else {
+      setState(() => _isBookOpen = false);
+    }
+  }
+
+  void _jumpToChapter(int index) {
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(index);
+    }
+    setState(() {
+      _currentPage = index;
+      _isBookOpen = true;
+      _continuousScrollMode = false;
+    });
   }
 
   void _openTableOfContents() {
@@ -222,14 +409,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                   trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textMuted),
                   onTap: () {
                     Navigator.pop(ctx);
-                    setState(() {
-                      _isBookOpen = true;
-                      _continuousScrollMode = false;
-                      _currentPage = i;
-                    });
-                    if (_pageController.hasClients) {
-                      _pageController.jumpToPage(i);
-                    }
+                    _jumpToChapter(i);
                   },
                 );
               }),
@@ -260,20 +440,59 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            Text(
-              _continuousScrollMode
-                  ? 'Continuous Reading View'
-                  : (_isBookOpen ? 'Page ${_currentPage + 1} of $_totalPages' : 'Official Sealed Volume'),
-              style: GoogleFonts.outfit(
-                color: AppColors.gold,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
-              ),
+            Row(
+              children: [
+                if (_hasAgreed) ...[
+                  const Icon(Icons.lock_rounded, color: AppColors.success, size: 11),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Ratified & Locked • ',
+                    style: GoogleFonts.outfit(
+                      color: AppColors.success,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+                Text(
+                  _continuousScrollMode
+                      ? 'Continuous View'
+                      : (_isBookOpen ? 'Chapter ${_currentPage + 1} of $_totalPages' : 'Official Sealed Volume'),
+                  style: GoogleFonts.outfit(
+                    color: AppColors.gold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
+          if (_hasAgreed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                  elevation: 0,
+                ),
+                onPressed: _returnToHome,
+                icon: const Icon(Icons.home_rounded, color: Colors.white, size: 16),
+                label: Text(
+                  'Home',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Table of Contents',
             icon: const Icon(Icons.format_list_bulleted_rounded, color: Colors.white),
@@ -297,7 +516,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
         ],
       ),
       body: SafeArea(
-        bottom: true,
+        bottom: false,
         child: _continuousScrollMode
             ? _buildContinuousScrollView()
             : (!_isBookOpen ? _buildBookCoverView() : _buildPagedBookView()),
@@ -366,23 +585,33 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                     child: Column(
                       children: [
-                        // Embossed Crest Seal
+                        // Embossed Crest Seal with Official Logo
                         Container(
-                          width: 80,
-                          height: 80,
+                          width: 88,
+                          height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFF142C57),
-                            border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                            border: Border.all(color: const Color(0xFFD4AF37), width: 2.5),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFD4AF37).withOpacity(0.35),
-                                blurRadius: 16,
+                                color: const Color(0xFFD4AF37).withOpacity(0.4),
+                                blurRadius: 20,
+                                spreadRadius: 1,
                               ),
                             ],
                           ),
-                          child: const Center(
-                            child: Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 40),
+                          padding: const EdgeInsets.all(12),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.auto_stories_rounded,
+                                color: Color(0xFFD4AF37),
+                                size: 40,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -473,11 +702,13 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            if (_hasAgreed) ...[
+                              _buildCoverBadge(Icons.lock_rounded, 'Ratified 🔒'),
+                              const SizedBox(width: 8),
+                            ],
                             _buildCoverBadge(Icons.menu_book, '9 Chapters'),
                             const SizedBox(width: 8),
                             _buildCoverBadge(Icons.calendar_month, 'Nov 2026'),
-                            const SizedBox(width: 8),
-                            _buildCoverBadge(Icons.verified, 'Ratified'),
                           ],
                         ),
 
@@ -513,13 +744,38 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 1.0,
-                                    height: 1.1,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
+
+                        if (_hasAgreed) ...[
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: AppColors.success, width: 1.8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                              ),
+                              onPressed: _returnToHome,
+                              icon: const Icon(Icons.home_rounded, color: AppColors.success, size: 20),
+                              label: Text(
+                                'Return to Home Page',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
 
                         const SizedBox(height: 14),
 
@@ -568,50 +824,48 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // VIEW 2: THE PAGED BOOK SPREAD (SWIPEABLE PAGES)
+  // VIEW 2: THE PAGED BOOK SPREAD (SWIPEABLE PAGES + CHAPTER QUICK SELECTOR)
   // ───────────────────────────────────────────────────────────────────────────
   Widget _buildPagedBookView() {
     return Column(
       children: [
-        // Top Book Ribbon & Navigation Header
+        // Quick Chapter Selector Strip (Prevents navigation hanging)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: const Color(0xFF0B172A),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton.icon(
-                onPressed: () {
-                  setState(() => _isBookOpen = false);
-                },
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Color(0xFFD4AF37)),
-                label: Text(
-                  'Book Cover',
-                  style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD4AF37).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5)),
-                ),
-                child: Text(
-                  'Page ${_currentPage + 1} of $_totalPages',
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFFDE68A),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: SizedBox(
+            height: 38,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _totalPages,
+              itemBuilder: (ctx, i) {
+                final isSelected = _currentPage == i;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    label: Text(
+                      'Ch. ${i + 1}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? const Color(0xFF0F172A) : Colors.white70,
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFFD4AF37),
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(
+                      color: isSelected ? const Color(0xFFD4AF37) : Colors.white24,
+                    ),
+                    showCheckmark: false,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    onSelected: (_) => _jumpToChapter(i),
                   ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.list_alt_rounded, color: Colors.white),
-                tooltip: 'Table of Contents',
-                onPressed: _openTableOfContents,
-              ),
-            ],
+                );
+              },
+            ),
           ),
         ),
 
@@ -620,12 +874,13 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
           child: PageView.builder(
             controller: _pageController,
             itemCount: _totalPages,
+            physics: const PageScrollPhysics(),
             onPageChanged: (idx) {
               setState(() => _currentPage = idx);
             },
             itemBuilder: (context, index) {
               return Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                 child: Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFFFAF7F0), // Authentic book parchment paper tone
@@ -666,15 +921,25 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
 
                         // Page Content
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                          padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Chapter Top Ornament
+                              // Chapter Top Ornament with Logo
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Text('⚜️ ', style: TextStyle(fontSize: 14)),
+                                  ClipOval(
+                                    child: Image.asset(
+                                      'assets/logo.png',
+                                      width: 18,
+                                      height: 18,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const SizedBox(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
                                   Text(
                                     'CHAPTER ${index + 1}',
                                     style: GoogleFonts.cinzel(
@@ -687,13 +952,13 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                                   const Text(' ⚜️', style: TextStyle(fontSize: 14)),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 4),
                               Center(
                                 child: Text(
                                   _chapterTitles[index],
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.outfit(
-                                    fontSize: 18,
+                                    fontSize: 17,
                                     fontWeight: FontWeight.w800,
                                     color: const Color(0xFF1E293B),
                                   ),
@@ -710,20 +975,20 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 12),
 
-                              // Dynamic Chapter Page Content
+                              // Dynamic Chapter Page Content with safe independent scrolling
                               Expanded(
                                 child: SingleChildScrollView(
-                                  physics: const BouncingScrollPhysics(),
+                                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                                   child: _buildChapterContent(index),
                                 ),
                               ),
 
                               // Page Footer
-                              const SizedBox(height: 10),
-                              const Divider(color: Color(0xFFE2D6C5), height: 1),
                               const SizedBox(height: 8),
+                              const Divider(color: Color(0xFFE2D6C5), height: 1),
+                              const SizedBox(height: 6),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -732,7 +997,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
                                     style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
                                   ),
                                   Text(
-                                    '— Page ${index + 1} —',
+                                    '— Page ${index + 1} of $_totalPages —',
                                     style: GoogleFonts.cinzel(fontSize: 11, color: const Color(0xFF92400E), fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -749,99 +1014,106 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
           ),
         ),
 
-        // Un-Squeezed Turn Page Navigation Footer
+        // Rock-Solid Navigation Footer with zero text clipping and home redirection
         Container(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.of(context).padding.bottom),
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + MediaQuery.of(context).padding.bottom),
           color: const Color(0xFF0F172A),
           child: Row(
             children: [
               // PREVIOUS BUTTON
-              if (_currentPage > 0)
-                Expanded(
-                  child: SizedBox(
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                      ),
-                      onPressed: () {
-                        _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                      },
-                      icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                      label: Text('Prev Page', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, height: 1.1)),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: SizedBox(
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: const BorderSide(color: Colors.white24),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                      ),
-                      onPressed: () => setState(() => _isBookOpen = false),
-                      icon: const Icon(Icons.book_rounded, size: 18),
-                      label: Text('Cover Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14, height: 1.1)),
-                    ),
+              Expanded(
+                child: _buildNavButton(
+                  onTap: _goToPrevPage,
+                  icon: _currentPage > 0 ? Icons.arrow_back_rounded : Icons.book_rounded,
+                  label: _currentPage > 0 ? 'Prev Page' : 'Cover Page',
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  border: BorderSide(
+                    color: _currentPage > 0 ? const Color(0xFFD4AF37) : Colors.white24,
+                    width: 1.5,
                   ),
                 ),
+              ),
 
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
 
-              // NEXT BUTTON OR AFFIRM BUTTON
-              if (_currentPage < _totalPages - 1)
-                Expanded(
-                  child: SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
+              // NEXT BUTTON OR DONE / RATIFY BUTTON
+              Expanded(
+                child: _currentPage < _totalPages - 1
+                    ? _buildNavButton(
+                        onTap: _goToNextPage,
+                        icon: Icons.arrow_forward_rounded,
+                        label: 'Next Page',
                         backgroundColor: const Color(0xFFD4AF37),
                         foregroundColor: const Color(0xFF0F172A),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                        elevation: 0,
-                      ),
-                      onPressed: () {
-                        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                      },
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                      label: Text('Next Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14, height: 1.1)),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.success,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                        elevation: 0,
-                      ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please check the agreement box below to complete ratification.')),
-                        );
-                      },
-                      icon: const Icon(Icons.check_circle_rounded, size: 18),
-                      label: Text('Ratify & Agree', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14, height: 1.1)),
-                    ),
-                  ),
-                ),
+                      )
+                    : (_hasAgreed
+                        ? _buildNavButton(
+                            onTap: _returnToHome,
+                            icon: Icons.home_rounded,
+                            label: 'Done • Home',
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                          )
+                        : _buildNavButton(
+                            onTap: _performRatification,
+                            icon: Icons.verified_rounded,
+                            label: 'Ratify & Agree',
+                            backgroundColor: const Color(0xFFD4AF37),
+                            foregroundColor: const Color(0xFF0F172A),
+                          )),
+              ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNavButton({
+    required VoidCallback? onTap,
+    required IconData icon,
+    required String label,
+    required Color backgroundColor,
+    required Color foregroundColor,
+    BorderSide? border,
+  }) {
+    return Material(
+      color: backgroundColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: border != null ? Border.fromBorderSide(border) : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: foregroundColor),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: foregroundColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -878,6 +1150,53 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Prestigious Branded Header
+        Center(
+          child: Column(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD4AF37).withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(8),
+                child: ClipOval(
+                  child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'ONEFELLOWSHIP BENEVOLENT FUND',
+                style: GoogleFonts.cinzel(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF78350F),
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Text(
+                'United in Fellowship • Driven by Care',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF92400E),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -1199,7 +1518,63 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildArticleBadge('Article 8', 'Ratification & Digital Affirmation'),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+
+        // Official Digital Wax Seal with Logo
+        Center(
+          child: Column(
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF0F172A),
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD4AF37).withOpacity(0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(10),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.verified_rounded,
+                      color: Color(0xFFD4AF37),
+                      size: 36,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'OFFICIAL SEAL OF RATIFICATION',
+                style: GoogleFonts.cinzel(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF92400E),
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Text(
+                'Enacted by OneFellowship Benevolent Fund',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF78350F),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
         _buildParchmentText('Ratified by the Executive Governance and Church Fellowship:'),
         const SizedBox(height: 10),
         Row(
@@ -1252,74 +1627,185 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
         ),
         const SizedBox(height: 18),
 
-        // DIGITAL AFFIRMATION AGREEMENT CARD
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _hasAgreed ? const Color(0xFFECFDF5) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _hasAgreed ? AppColors.success : const Color(0xFFD4AF37), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: (_hasAgreed ? AppColors.success : const Color(0xFFD4AF37)).withOpacity(0.08),
-                blurRadius: 10,
+        if (_hasAgreed) ...[
+          // PERMANENTLY LOCKED & MARKED RATIFICATION CERTIFICATE
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _hasAgreed ? Icons.verified_rounded : Icons.gavel_rounded,
-                    color: _hasAgreed ? AppColors.success : const Color(0xFFB45309),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Digital Affirmation & Agreement',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _hasAgreed,
-                    activeColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    onChanged: _isSavingAgreement ? null : _toggleAgreement,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        if (!_isSavingAgreement) _toggleAgreement(!_hasAgreed);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'I have read, understood, and solemnly agree to abide by all the rules, constitution, KES 1,000 commitment fee, KES 1,000 minimum contributions, 7-day grace period, and disciplinary guidelines of OneFellowship.',
-                          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.4),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF059669), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF059669).withOpacity(0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF059669),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.lock_rounded, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'RATIFIED & PERMANENTLY LOCKED',
+                            style: GoogleFonts.cinzel(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF065F46),
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Legally Binding Covenant Signed',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.verified_rounded, color: Color(0xFF059669), size: 28),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Color(0xFFA7F3D0), height: 1),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Signed & ratified on ${_agreedAtDate != null && _agreedAtDate!.length >= 10 ? _agreedAtDate!.substring(0, 10) : DateTime.now().toIso8601String().substring(0, 10)}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF065F46),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              if (_hasAgreed && _agreedAtDate != null) ...[
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  '✅ Bound & digitally ratified on ${_agreedAtDate!.length >= 10 ? _agreedAtDate!.substring(0, 10) : _agreedAtDate}',
-                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                  'Your ratification is permanently locked and recorded in fellowship archives. You may freely browse and review all chapters of the constitution at any time.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    color: const Color(0xFF065F46),
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Prominent Return to Home button right on certificate
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF065F46),
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    ),
+                    onPressed: _returnToHome,
+                    icon: const Icon(Icons.home_rounded, size: 20),
+                    label: Text(
+                      'Done • Return to Home Page',
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
+        ] else ...[
+          // UNAGREED - RATIFICATION ACTION CARD
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD4AF37).withOpacity(0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.gavel_rounded, color: Color(0xFFB45309), size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Digital Affirmation & Agreement',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'By ratifying below, you solemnly pledge to abide by all the rules, constitution, KES 1,000 commitment fee, KES 1,000 minimum contributions, 7-day grace period, and disciplinary guidelines of OneFellowship under 1st Corinthians 14:40.',
+                  style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569), height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      foregroundColor: const Color(0xFF0B192C),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    ),
+                    onPressed: _isSavingAgreement ? null : _performRatification,
+                    icon: _isSavingAgreement
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0B192C)),
+                          )
+                        : const Icon(Icons.verified_rounded, size: 20),
+                    label: Text(
+                      _isSavingAgreement ? 'Recording Ratification...' : 'Solemnly Ratify & Agree',
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1333,8 +1819,55 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCoverBadge(Icons.auto_stories, 'Continuous Scroll Mode'),
-          const SizedBox(height: 14),
+          // Branded Continuous Scroll Hero Banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F254B), Color(0xFF0B172A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  child: ClipOval(child: Image.asset('assets/logo.png', fit: BoxFit.contain)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ONEFELLOWSHIP CONSTITUTION',
+                        style: GoogleFonts.cinzel(color: const Color(0xFFFFFBEB), fontSize: 13, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Continuous Reading View • All 9 Chapters',
+                        style: GoogleFonts.outfit(color: const Color(0xFFFDE68A), fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_hasAgreed)
+                  const Icon(Icons.verified_rounded, color: AppColors.success, size: 24),
+              ],
+            ),
+          ),
           ...List.generate(_totalPages, (i) {
             return Container(
               margin: const EdgeInsets.only(bottom: 20),
@@ -1369,6 +1902,29 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
               ),
             );
           }),
+
+          if (_hasAgreed) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: _returnToHome,
+                icon: const Icon(Icons.home_rounded, size: 22),
+                label: Text(
+                  'Done Reading • Return to Home Page',
+                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
         ],
       ),
     );

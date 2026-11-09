@@ -999,7 +999,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                               icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
                               label: Text(
                                 '+ Add Another Dependant',
-                                style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14, height: 1.1),
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14),
                               ),
                             ),
                           ),
@@ -1146,7 +1146,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,
-                                      height: 1.1,
                                     ),
                                   ),
                                 ],

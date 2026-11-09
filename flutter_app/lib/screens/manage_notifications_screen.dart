@@ -365,7 +365,7 @@ class _ManageNotificationsScreenState extends State<ManageNotificationsScreen> {
                       icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
                       label: Text(
                         'Send to ${_selectedMemberIds.length} Members',
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16, height: 1.1),
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
                       ),
                     ),
                   ),
