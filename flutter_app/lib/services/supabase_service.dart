@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'offline_cache_service.dart';
 
 /// User wrapper to provide backwards compatibility with screens
 class AppUser {
@@ -83,17 +84,39 @@ class SupabaseService {
     return true;
   }
 
-  static Future<void> signIn(String email, String password) async {
+  static Map<String, dynamic>? _cachedMemberDoc;
+
+  /// Fast login: authenticates and pipelines member doc retrieval in one step
+  static Future<Map<String, dynamic>?> signIn(String email, String password) async {
     await init();
     final cred = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
     final user = cred.user;
-    if (user != null) {
-      await _ensureMemberDocument(user);
+    if (user == null) return null;
+
+    // Background asynchronous login timestamp update (does not block UI)
+    _recordLoginTime().catchError((_) {});
+
+    // Fast pipelined document fetch
+    Map<String, dynamic>? memberData;
+    try {
+      final docRef = _firestore.collection('members').doc(user.uid);
+      final doc = await docRef.get().timeout(const Duration(seconds: 4));
+      if (doc.exists && doc.data() != null) {
+        memberData = {'id': doc.id, ...doc.data()!};
+        _cachedMemberDoc = memberData;
+        OfflineCacheService.cacheMember(memberData).catchError((_) {});
+      } else {
+        // Auto-provision if missing
+        _ensureMemberDocument(user).catchError((_) {});
+      }
+    } catch (e) {
+      debugPrint('Fast member fetch error: $e');
     }
-    await _recordLoginTime();
+
+    return memberData;
   }
 
   static Future<void> _ensureMemberDocument(fb_auth.User user) async {
@@ -159,6 +182,7 @@ class SupabaseService {
   }
 
   static Future<void> signOut() async {
+    _cachedMemberDoc = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('last_login_time');
     await _auth.signOut();
@@ -189,28 +213,54 @@ class SupabaseService {
     return list;
   }
 
-  static Future<Map<String, dynamic>?> fetchCurrentMember() async {
+  static Future<Map<String, dynamic>?> fetchCurrentMember({bool forceRefresh = false}) async {
     final u = currentUser;
     if (u == null) return null;
+
+    if (!forceRefresh && _cachedMemberDoc != null && _cachedMemberDoc!['id'] == u.id) {
+      return _cachedMemberDoc;
+    }
+
     try {
       final docRef = _firestore.collection('members').doc(u.id);
-      final doc = await docRef.get();
+      final doc = await docRef.get().timeout(const Duration(seconds: 4));
       if (!doc.exists || doc.data() == null) {
         final rawUser = _auth.currentUser;
         if (rawUser != null) {
           await _ensureMemberDocument(rawUser);
           final newDoc = await docRef.get();
           if (newDoc.exists && newDoc.data() != null) {
-            return {'id': newDoc.id, ...newDoc.data()!};
+            final data = {'id': newDoc.id, ...newDoc.data()!};
+            _cachedMemberDoc = data;
+            OfflineCacheService.cacheMember(data).catchError((_) {});
+            return data;
           }
         }
         return null;
       }
-      return {'id': doc.id, ...doc.data()!};
+      final data = {'id': doc.id, ...doc.data()!};
+      _cachedMemberDoc = data;
+      OfflineCacheService.cacheMember(data).catchError((_) {});
+      return data;
     } catch (e) {
       debugPrint('fetchCurrentMember error: $e');
-      return null;
+      if (_cachedMemberDoc != null && _cachedMemberDoc!['id'] == u.id) {
+        return _cachedMemberDoc;
+      }
+      return await OfflineCacheService.getCachedMember();
     }
+  }
+
+  static bool isMemberDataComplete(Map<String, dynamic>? data) {
+    if (data == null) return false;
+    final formDetails = (data['form_details'] as Map<String, dynamic>?) ?? {};
+    if (data['is_profile_complete'] == true || formDetails['is_profile_complete'] == true) {
+      return true;
+    }
+    final phone = (data['phone'] ?? '').toString().trim();
+    final idNumber = (formDetails['national_id_number'] ?? formDetails['id_number'] ?? '').toString().trim();
+    final branch = (formDetails['branch'] ?? '').toString().trim();
+    return phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty;
   }
 
   static Future<bool> isProfileComplete(String userId) async {
@@ -220,23 +270,19 @@ class SupabaseService {
       return true;
     }
 
+    if (_cachedMemberDoc != null && _cachedMemberDoc!['id'] == userId) {
+      final isDone = isMemberDataComplete(_cachedMemberDoc);
+      if (isDone) {
+        await prefs.setBool('profile_completed_$userId', true);
+      }
+      return isDone;
+    }
+
     try {
-      final doc = await _firestore.collection('members').doc(userId).get();
+      final doc = await _firestore.collection('members').doc(userId).get().timeout(const Duration(seconds: 4));
       if (!doc.exists || doc.data() == null) return false;
       final data = doc.data()!;
-      final formDetails = (data['form_details'] as Map<String, dynamic>?) ?? {};
-
-      // Explicit flag
-      if (data['is_profile_complete'] == true || formDetails['is_profile_complete'] == true) {
-        await prefs.setBool('profile_completed_$userId', true);
-        return true;
-      }
-
-      final phone = (data['phone'] ?? '').toString().trim();
-      final idNumber = (formDetails['national_id_number'] ?? formDetails['id_number'] ?? '').toString().trim();
-      final branch = (formDetails['branch'] ?? '').toString().trim();
-
-      final isDone = phone.isNotEmpty && idNumber.isNotEmpty && branch.isNotEmpty;
+      final isDone = isMemberDataComplete(data);
       if (isDone) {
         await prefs.setBool('profile_completed_$userId', true);
       }
@@ -372,6 +418,71 @@ class SupabaseService {
 
   static Future<void> adminUpdateMember(String id, Map<String, dynamic> data) async {
     await updateMember(id, data);
+  }
+
+  /// Terminates a member's account, revoking app access and logging audit trail
+  static Future<void> terminateMember({
+    required String memberId,
+    required String reason,
+    String? terminatedByName,
+    String? terminatedByRole,
+  }) async {
+    final nowStr = DateTime.now().toIso8601String();
+    await updateMember(memberId, {
+      'status': 'terminated',
+      'is_terminated': true,
+      'is_active': false,
+      'termination_reason': reason,
+      'terminated_at': nowStr,
+      'terminated_by': terminatedByName ?? currentUser?.displayName ?? 'Admin',
+      'terminated_by_role': terminatedByRole ?? 'Administrator',
+    });
+
+    await logAuditEvent(
+      action: 'MEMBER_TERMINATED',
+      title: 'Member Terminated: $memberId',
+      description: 'Reason: $reason (Enacted under Article 7 Discipline Policy)',
+      category: 'members',
+      performedBy: terminatedByName ?? currentUser?.displayName ?? 'Admin',
+      performedById: currentUser?.id,
+      performedByRole: terminatedByRole ?? 'Administrator',
+      metadata: {
+        'member_id': memberId,
+        'termination_reason': reason,
+        'terminated_at': nowStr,
+      },
+    );
+  }
+
+  /// Reinstates a terminated member back to Active status
+  static Future<void> reinstateMember({
+    required String memberId,
+    String? reinstatedByName,
+    String? reinstatedByRole,
+  }) async {
+    final nowStr = DateTime.now().toIso8601String();
+    await updateMember(memberId, {
+      'status': 'active',
+      'is_terminated': false,
+      'is_active': true,
+      'reinstated_at': nowStr,
+      'reinstated_by': reinstatedByName ?? currentUser?.displayName ?? 'Admin',
+      'reinstated_by_role': reinstatedByRole ?? 'Administrator',
+    });
+
+    await logAuditEvent(
+      action: 'MEMBER_REINSTATED',
+      title: 'Member Reinstated: $memberId',
+      description: 'Membership restored to Active status by ${reinstatedByName ?? 'Admin'}',
+      category: 'members',
+      performedBy: reinstatedByName ?? currentUser?.displayName ?? 'Admin',
+      performedById: currentUser?.id,
+      performedByRole: reinstatedByRole ?? 'Administrator',
+      metadata: {
+        'member_id': memberId,
+        'reinstated_at': nowStr,
+      },
+    );
   }
 
   static Future<List<Map<String, dynamic>>> adminFetchAllPayments() async {

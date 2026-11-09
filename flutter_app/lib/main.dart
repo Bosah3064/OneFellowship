@@ -20,6 +20,7 @@ import 'screens/manage_notifications_screen.dart';
 import 'screens/admin_wallet_screen.dart';
 import 'screens/admin_audit_logs_screen.dart';
 import 'screens/terms_and_conditions_screen.dart';
+import 'screens/terminated_account_screen.dart';
 import 'screens/force_change_password_screen.dart';
 import 'services/biometric_service.dart';
 import 'services/supabase_service.dart';
@@ -39,22 +40,27 @@ void main() async {
     await SupabaseService.init();
     final valid = await SupabaseService.isSessionValid();
     if (valid) {
-      final bioAvail = await BiometricService.isBiometricAvailable();
-      final bioEnabled = await BiometricService.isBiometricEnabled();
-
-      if (bioAvail && bioEnabled) {
-        initRoute = BiometricUnlockScreen.route;
+      final member = await SupabaseService.fetchCurrentMember();
+      if (member != null && (member['status'] == 'terminated' || member['is_terminated'] == true)) {
+        initRoute = TerminatedAccountScreen.route;
       } else {
-        final u = SupabaseService.currentUser;
-        if (u != null) {
-          final profileDone = await SupabaseService.isProfileComplete(u.id);
-          if (!profileDone) {
-            initRoute = CompleteProfileScreen.route;
+        final bioAvail = await BiometricService.isBiometricAvailable();
+        final bioEnabled = await BiometricService.isBiometricEnabled();
+
+        if (bioAvail && bioEnabled) {
+          initRoute = BiometricUnlockScreen.route;
+        } else {
+          final u = SupabaseService.currentUser;
+          if (u != null) {
+            final profileDone = await SupabaseService.isProfileComplete(u.id);
+            if (!profileDone) {
+              initRoute = CompleteProfileScreen.route;
+            } else {
+              initRoute = DashboardScreen.route;
+            }
           } else {
             initRoute = DashboardScreen.route;
           }
-        } else {
-          initRoute = DashboardScreen.route;
         }
       }
     }
@@ -177,6 +183,7 @@ class OneFellowshipApp extends StatelessWidget {
         SettingsScreen.route: (_) => const SettingsScreen(),
         NotificationsScreen.route: (_) => const NotificationsScreen(),
         TermsAndConditionsScreen.route: (_) => const TermsAndConditionsScreen(),
+        TerminatedAccountScreen.route: (_) => const TerminatedAccountScreen(),
       },
     );
   }

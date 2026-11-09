@@ -7,6 +7,7 @@ import '../services/supabase_service.dart';
 import 'complete_profile_screen.dart';
 import 'dashboard_screen.dart';
 import 'login_screen.dart';
+import 'terminated_account_screen.dart';
 
 class BiometricUnlockScreen extends StatefulWidget {
   static const route = '/biometric-unlock';
@@ -59,6 +60,12 @@ class _BiometricUnlockScreenState extends State<BiometricUnlockScreen> {
 
         final u = SupabaseService.currentUser;
         if (u != null) {
+          final member = await SupabaseService.fetchCurrentMember();
+          if (member != null && (member['status'] == 'terminated' || member['is_terminated'] == true)) {
+            if (!mounted) return;
+            Navigator.pushNamedAndRemoveUntil(context, TerminatedAccountScreen.route, (r) => false, arguments: member);
+            return;
+          }
           final isComplete = await SupabaseService.isProfileComplete(u.id);
           if (!isComplete && mounted) {
             Navigator.pushNamedAndRemoveUntil(context, CompleteProfileScreen.route, (r) => false);

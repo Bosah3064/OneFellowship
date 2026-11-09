@@ -78,8 +78,13 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       final name = m['full_name']?.toString().toLowerCase() ?? '';
       final email = m['email']?.toString().toLowerCase() ?? '';
       final role = m['role']?.toString().toLowerCase() ?? 'member';
+      final status = m['status']?.toString().toLowerCase() ?? 'active';
+      final isTerminated = status == 'terminated' || m['is_terminated'] == true;
+
       final matchesSearch = name.contains(_searchQuery.toLowerCase()) || email.contains(_searchQuery.toLowerCase());
-      final matchesRole = _filterRole == 'all' || role == _filterRole;
+      final matchesRole = _filterRole == 'all'
+          ? true
+          : (_filterRole == 'terminated' ? isTerminated : role == _filterRole);
       return matchesSearch && matchesRole;
     }).toList();
   }
@@ -87,6 +92,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   void _showEditDialog(Map<String, dynamic> member) {
     String role = member['role']?.toString().toLowerCase() ?? 'member';
     String status = member['status']?.toString().toLowerCase() ?? 'active';
+    final isTerminated = status == 'terminated' || member['is_terminated'] == true;
 
     showDialog(
       context: context,
@@ -96,92 +102,173 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Text('Edit Member', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Avatar
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: AppColors.primary,
-                    child: Text(
-                      (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
-                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<String>(
-                    value: ['member', 'admin', 'treasury', 'chairperson'].contains(role) ? role : 'member',
-                    decoration: InputDecoration(
-                      labelText: 'Role',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'member', child: Text('Member')),
-                      DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                      DropdownMenuItem(value: 'treasury', child: Text('Treasury')),
-                      DropdownMenuItem(value: 'chairperson', child: Text('Chairperson')),
-                    ],
-                    onChanged: (val) => setDialogState(() => role = val!),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: ['active', 'inactive', 'probation', 'suspended'].contains(status) ? status : 'active',
-                    decoration: InputDecoration(
-                      labelText: 'Status',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'active', child: Text('Active')),
-                      DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                      DropdownMenuItem(value: 'probation', child: Text('Probation')),
-                      DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
-                    ],
-                    onChanged: (val) => setDialogState(() => status = val!),
-                  ),
-                  const SizedBox(height: 16),
-                  // View KYC & Residential Info Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showMemberKycSheet(member);
-                      },
-                      icon: const Icon(Icons.assignment_ind_outlined, size: 18),
-                      label: Text('View KYC & Residence Details', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Avatar
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: isTerminated ? const Color(0xFFDC2626) : AppColors.primary,
+                      child: Text(
+                        (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
+                        style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Reset Password Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showResetPasswordDialog(member);
-                      },
-                      icon: const Icon(Icons.lock_reset_rounded, size: 18),
-                      label: Text('Reset Password', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange.shade700,
-                        side: BorderSide(color: Colors.orange.shade300),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                    const SizedBox(height: 8),
+                    Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+                    const SizedBox(height: 14),
+
+                    if (isTerminated) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFEF4444)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.block_rounded, color: Color(0xFF991B1B), size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'MEMBERSHIP TERMINATED',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: const Color(0xFF991B1B)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Reason: ${member['termination_reason'] ?? 'Article 7 Disciplinary Action'}',
+                              style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF7F1D1D)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    DropdownButtonFormField<String>(
+                      value: ['member', 'admin', 'treasury', 'chairperson'].contains(role) ? role : 'member',
+                      decoration: InputDecoration(
+                        labelText: 'Role',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'member', child: Text('Member')),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                        DropdownMenuItem(value: 'treasury', child: Text('Treasury')),
+                        DropdownMenuItem(value: 'chairperson', child: Text('Chairperson')),
+                      ],
+                      onChanged: (val) => setDialogState(() => role = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: ['active', 'inactive', 'probation', 'suspended', 'terminated'].contains(status) ? status : 'active',
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'active', child: Text('Active')),
+                        DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                        DropdownMenuItem(value: 'probation', child: Text('Probation')),
+                        DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
+                        DropdownMenuItem(
+                          value: 'terminated',
+                          child: Text('Terminated (Access Revoked)', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      onChanged: (val) => setDialogState(() => status = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    // View KYC & Residential Info Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showMemberKycSheet(member);
+                        },
+                        icon: const Icon(Icons.assignment_ind_outlined, size: 18),
+                        label: Text('View KYC & Residence Details', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+
+                    // Terminate / Reinstate Action Button
+                    if (isTerminated) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _confirmReinstateMember(member);
+                          },
+                          icon: const Icon(Icons.restore_rounded, size: 18),
+                          label: Text('Reinstate to Active', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showTerminateMemberDialog(member);
+                          },
+                          icon: const Icon(Icons.person_off_rounded, size: 18),
+                          label: Text('Terminate Membership', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626),
+                            side: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 10),
+                    // Reset Password Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showResetPasswordDialog(member);
+                        },
+                        icon: const Icon(Icons.lock_reset_rounded, size: 18),
+                        label: Text('Reset Password', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade700,
+                          side: BorderSide(color: Colors.orange.shade300),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -194,7 +281,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                     Navigator.pop(context);
                     setState(() => _isLoading = true);
                     try {
-                      await SupabaseService.adminUpdateMember(member['id'].toString(), {'role': role, 'status': status});
+                      await SupabaseService.adminUpdateMember(member['id'].toString(), {
+                        'role': role,
+                        'status': status,
+                        if (status == 'terminated') 'is_terminated': true,
+                        if (status == 'active') 'is_terminated': false,
+                      });
                       await _loadData();
                     } catch (e) {
                       setState(() => _isLoading = false);
@@ -211,11 +303,211 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     );
   }
 
+  void _showTerminateMemberDialog(Map<String, dynamic> member) {
+    String selectedReason = 'Two-Case Contribution Default (Article 7 Clause 1)';
+    final customReasonCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDlgState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 26),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Terminate Member', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFEF4444)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Warning: Strict Article 7 Enforcement',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF991B1B)),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Terminating ${member['full_name'] ?? 'this member'} will immediately revoke their mobile app access, freeze welfare benefit eligibility, and notify their registered Next of Kin.',
+                            style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF7F1D1D), height: 1.35),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Grounds / Reason for Termination:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedReason,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Two-Case Contribution Default (Article 7 Clause 1)',
+                          child: Text('Two-Case Default (Art. 7)', style: TextStyle(fontSize: 12.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Financial Misappropriation or Fraud (Article 7 Clause 4)',
+                          child: Text('Financial Embezzlement (Art. 7)', style: TextStyle(fontSize: 12.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Gross Misconduct / Disciplinary Action',
+                          child: Text('Gross Misconduct / Disciplinary Action', style: TextStyle(fontSize: 12.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Voluntary Resignation by Member',
+                          child: Text('Voluntary Resignation by Member', style: TextStyle(fontSize: 12.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Other Resolution by Leadership',
+                          child: Text('Other Resolution by Leadership', style: TextStyle(fontSize: 12.5)),
+                        ),
+                      ],
+                      onChanged: (val) => setDlgState(() => selectedReason = val!),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: customReasonCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Notes / Minute Ref (Optional)',
+                        hintText: 'e.g. Minute 4.2 / Default on Case #14 & #15',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final fullReason = customReasonCtrl.text.trim().isNotEmpty
+                        ? '$selectedReason - Note: ${customReasonCtrl.text.trim()}'
+                        : selectedReason;
+
+                    setState(() => _isLoading = true);
+                    try {
+                      final currentAdmin = SupabaseService.currentUser?.displayName ?? 'Admin';
+                      await SupabaseService.terminateMember(
+                        memberId: member['id'].toString(),
+                        reason: fullReason,
+                        terminatedByName: currentAdmin,
+                        terminatedByRole: 'Administrator',
+                      );
+                      await _loadData();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Member terminated. App access revoked for ${member['full_name']}.'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.person_off_rounded, size: 18),
+                  label: const Text('Confirm Termination', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmReinstateMember(Map<String, dynamic> member) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Reinstate Member', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text(
+          'Are you sure you want to reinstate ${member['full_name'] ?? 'this member'}? Their account will be restored to Active status and mobile app access will be unlocked.',
+          style: GoogleFonts.outfit(fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                final currentAdmin = SupabaseService.currentUser?.displayName ?? 'Admin';
+                await SupabaseService.reinstateMember(
+                  memberId: member['id'].toString(),
+                  reinstatedByName: currentAdmin,
+                  reinstatedByRole: 'Administrator',
+                );
+                await _loadData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Member ${member['full_name']} reinstated to Active status.'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                }
+              } catch (e) {
+                setState(() => _isLoading = false);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Reinstate', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showMemberKycSheet(Map<String, dynamic> member) {
     final fd = (member['form_details'] as Map<String, dynamic>?) ?? {};
     final idNumber = fd['national_id_number'] ?? fd['id_number'] ?? 'Not provided';
     final branch = fd['branch'] ?? 'Not set';
     final occupation = fd['occupation'] ?? fd['profession'] ?? 'Not set';
+    final country = fd['country'] ?? member['country'] ?? 'Kenya';
     final county = fd['county'] ?? 'Not set';
     final subCounty = fd['sub_county'] ?? fd['subcounty'] ?? 'Not set';
     final ward = fd['ward'] ?? fd['word'] ?? 'Not set';
@@ -226,6 +518,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     final nokIdType = fd['next_of_kin_id_type'] ?? fd['nok_id_type'] ?? 'ID Document';
     final nokRel = fd['relationship_to_you'] ?? 'Not set';
     final agreedRules = (fd['agreed_to_welfare_rules'] == true) || (member['agreed_to_welfare_rules'] == true);
+    final isTerminated = (member['status'] == 'terminated') || (member['is_terminated'] == true);
 
     showModalBottomSheet(
       context: context,
@@ -251,14 +544,63 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (isTerminated) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.gavel_rounded, color: Colors.red, size: 28),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'MEMBERSHIP TERMINATED (ARTICLE 7)',
+                                style: GoogleFonts.outfit(color: Colors.red.shade800, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              if (member['termination_reason'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    'Grounds: ${member['termination_reason']}',
+                                    style: GoogleFonts.outfit(color: Colors.red.shade900, fontSize: 12),
+                                  ),
+                                ),
+                              if (member['terminated_at'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    'Enforced: ${member['terminated_at'].toString().split('T').first}',
+                                    style: GoogleFonts.outfit(color: Colors.red.shade700, fontSize: 11),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 Row(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                      backgroundColor: isTerminated ? Colors.red.shade100 : AppColors.primary.withOpacity(0.1),
                       child: Text(
                         (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
-                        style: GoogleFonts.outfit(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18),
+                        style: GoogleFonts.outfit(
+                          color: isTerminated ? Colors.red.shade800 : AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -266,7 +608,29 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  member['full_name'] ?? 'Unknown',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isTerminated) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.red.shade300),
+                                  ),
+                                  child: Text('TERMINATED', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                                ),
+                              ],
+                            ],
+                          ),
                           Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
                         ],
                       ),
@@ -278,6 +642,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                 const SizedBox(height: 10),
                 Text('Location & Administrative Origin', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryDark)),
                 const SizedBox(height: 8),
+                _buildKycRow('Country', country.toString()),
                 _buildKycRow('County', county.toString()),
                 _buildKycRow('Sub-County', subCounty.toString()),
                 _buildKycRow('Ward', ward.toString()),

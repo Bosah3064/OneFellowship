@@ -79,7 +79,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _dobCtrl = TextEditingController();
   final _occupationCtrl = TextEditingController();
 
-  // Residential & location controllers (County, Sub-County, Ward, Village)
+  // Residential & location controllers (Country, County, Sub-County, Ward, Village)
+  final _countryCtrl = TextEditingController(text: 'Kenya');
   final _countyCtrl = TextEditingController();
   final _subCountyCtrl = TextEditingController();
   final _wardCtrl = TextEditingController();
@@ -164,6 +165,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _idNumberCtrl.dispose();
     _dobCtrl.dispose();
     _occupationCtrl.dispose();
+    _countryCtrl.dispose();
     _countyCtrl.dispose();
     _subCountyCtrl.dispose();
     _wardCtrl.dispose();
@@ -191,6 +193,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         _dobCtrl.text = (fd['date_of_birth'] ?? fd['dob'] ?? '').toString();
         _occupationCtrl.text = (fd['occupation'] ?? '').toString();
 
+        _countryCtrl.text = (fd['country'] ?? member['country'] ?? 'Kenya').toString();
         _countyCtrl.text = (fd['county'] ?? '').toString();
         _subCountyCtrl.text = (fd['sub_county'] ?? fd['subcounty'] ?? '').toString();
         _wardCtrl.text = (fd['ward'] ?? fd['word'] ?? '').toString();
@@ -363,12 +366,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       final nokNameVal = _nokNameCtrl.text.trim();
       final nokPhoneVal = _nokPhoneCtrl.text.trim();
       final depCountVal = _hasDependants == 'Yes' ? _dependants.length.toString() : '0';
+      final countryVal = _countryCtrl.text.trim().isEmpty ? 'Kenya' : _countryCtrl.text.trim();
       final countyVal = _countyCtrl.text.trim();
       final subCountyVal = _subCountyCtrl.text.trim();
       final wardVal = _wardCtrl.text.trim();
       final villageVal = _villageCtrl.text.trim();
 
       final formDetails = <String, dynamic>{
+        'country': countryVal,
         'national_id_number': idVal,
         'id_number': idVal,
         'date_of_birth': _dobCtrl.text.trim(),
@@ -682,6 +687,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _countryCtrl,
+                          decoration: _inputDecor('Country of Residence', Icons.public_rounded, hint: 'e.g. Kenya / Diaspora'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Country is required' : null,
+                        ),
+                        const SizedBox(height: 14),
                         Row(
                           children: [
                             Expanded(

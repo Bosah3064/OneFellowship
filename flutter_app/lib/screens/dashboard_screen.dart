@@ -21,6 +21,7 @@ import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import 'complete_profile_screen.dart';
 import 'terms_and_conditions_screen.dart';
+import 'terminated_account_screen.dart';
 
 bool _hasPlayedGreeting = false;
 
@@ -184,15 +185,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoading = true);
     try {
       final member = await SupabaseService.fetchCurrentMember();
+
+      // Check for account termination
+      if (member != null && (member['status'] == 'terminated' || member['is_terminated'] == true)) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            TerminatedAccountScreen.route,
+            (route) => false,
+            arguments: member,
+          );
+          return;
+        }
+      }
+
       List<Map<String, dynamic>> payments = [];
       int unreadCount = 0;
       final savedTheme = await OfflineCacheService.getPreferredTheme();
       if (member != null) {
-        payments = await SupabaseService.fetchMemberPayments(member['id']);
-        unreadCount = await SupabaseService.countUnreadNotifications(member['id']);
-        // Cache for offline use
-        await OfflineCacheService.cacheMember(member);
-        await OfflineCacheService.cachePayments(payments);
+        // Parallel queries cut network wait time in half
+        final results = await Future.wait([
+          SupabaseService.fetchMemberPayments(member['id']),
+          SupabaseService.countUnreadNotifications(member['id']),
+        ]);
+        payments = results[0] as List<Map<String, dynamic>>;
+        unreadCount = results[1] as int;
+        // Background cache for offline use
+        OfflineCacheService.cacheMember(member).catchError((_) {});
+        OfflineCacheService.cachePayments(payments).catchError((_) {});
       }
       if (mounted) {
         setState(() {

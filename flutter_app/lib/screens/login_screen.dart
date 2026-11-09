@@ -9,6 +9,7 @@ import 'dashboard_screen.dart';
 import 'force_change_password_screen.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
+import 'terminated_account_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   static const route = '/login';
@@ -98,32 +99,40 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await SupabaseService.signIn(email, password);
+      final memberData = await SupabaseService.signIn(email, password);
 
       if (!mounted) return;
 
-      // Fetch member to check if they need a password reset
-      final memberData = await SupabaseService.fetchCurrentMember();
+      // 1. Check if account is terminated
+      if (memberData != null && (memberData['status'] == 'terminated' || memberData['is_terminated'] == true)) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          TerminatedAccountScreen.route,
+          (route) => false,
+          arguments: memberData,
+        );
+        return;
+      }
 
-      if (!mounted) return;
-
+      // 2. Check if admin required password reset
       if (memberData != null && memberData['requires_password_reset'] == true) {
         Navigator.pushReplacementNamed(context, ForceChangePasswordScreen.route);
-      } else {
-        final u = SupabaseService.currentUser;
-        if (u != null) {
-          final isComplete = await SupabaseService.isProfileComplete(u.id);
-          if (!isComplete && mounted) {
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              CompleteProfileScreen.route,
-              (route) => false,
-            );
-            return;
-          }
-        }
-        Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
+        return;
       }
+
+      // 3. Fast local/in-memory profile completion check (zero extra network lag)
+      final isComplete = SupabaseService.isMemberDataComplete(memberData);
+      if (!isComplete && mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          CompleteProfileScreen.route,
+          (route) => false,
+        );
+        return;
+      }
+
+      // 4. Instant entry to dashboard
+      Navigator.pushNamedAndRemoveUntil(context, DashboardScreen.route, (route) => false);
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString());
