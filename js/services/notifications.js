@@ -57,6 +57,27 @@ export const NotificationService = {
 
     try {
       const docRef = await db.collection('notifications').add(payload);
+
+      // Record to Audit Trail in Firestore
+      try {
+        await db.collection('audit_logs').add({
+          action: 'NOTIFICATION_SENT',
+          title: `Dispatched Notification: "${title.trim()}"`,
+          description: `Broadcast to ${recipient}: "${message.trim()}"`,
+          category: 'notifications',
+          performed_by: createdBy || 'Admin Official',
+          performed_by_role: 'Administrator',
+          created_at: payload.created_at,
+          metadata: {
+            recipient,
+            type,
+            notification_title: title.trim()
+          }
+        });
+      } catch (auditErr) {
+        console.warn('Could not write audit log:', auditErr);
+      }
+
       return { id: docRef.id, ...payload };
     } catch (error) {
       throw new Error(handleFirebaseError(error, 'Failed to send notification.'));

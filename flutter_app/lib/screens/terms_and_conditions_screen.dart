@@ -17,12 +17,37 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
   bool _hasAgreed = false;
   String? _agreedAtDate;
   bool _isSavingAgreement = false;
-  String _searchFilter = '';
+  
+  // Book navigation state
+  bool _isBookOpen = false;
+  bool _continuousScrollMode = false;
+  int _currentPage = 0;
+  final PageController _pageController = PageController();
+
+  final int _totalPages = 9;
+
+  final List<String> _chapterTitles = [
+    'Preamble & Guiding Principles',
+    'Ch. 1: Membership Registration',
+    'Ch. 2: Commitment Fee Policy',
+    'Ch. 3: Minimum Contribution',
+    'Ch. 4: Eligible Beneficiaries',
+    'Ch. 5: Covered Occasions & Timelines',
+    'Ch. 6: Transaction Authorization',
+    'Ch. 7: Discipline & Anti-Fraud',
+    'Ch. 8: Ratification & Affirmation',
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadAgreementStatus();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAgreementStatus() async {
@@ -41,7 +66,6 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
             });
           }
         } else {
-          // Check from Firestore member document
           final member = await SupabaseService.fetchCurrentMember();
           if (member != null && mounted) {
             final fd = (member['form_details'] as Map<String, dynamic>?) ?? {};
@@ -135,12 +159,93 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
     }
   }
 
+  void _openTableOfContents() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(Icons.menu_book_rounded, color: AppColors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Constitution Table of Contents',
+                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(),
+              ...List.generate(_totalPages, (i) {
+                final isCurrent = _currentPage == i && _isBookOpen;
+                return ListTile(
+                  dense: true,
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: isCurrent ? AppColors.primary : const Color(0xFFF3F4F6),
+                    child: Text(
+                      '${i + 1}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isCurrent ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    _chapterTitles[i],
+                    style: GoogleFonts.outfit(
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                      color: isCurrent ? AppColors.primary : AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textMuted),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _isBookOpen = true;
+                      _continuousScrollMode = false;
+                      _currentPage = i;
+                    });
+                    if (_pageController.hasClients) {
+                      _pageController.jumpToPage(i);
+                    }
+                  },
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        backgroundColor: AppColors.primaryDark,
+        backgroundColor: const Color(0xFF0F172A),
         elevation: 0,
         centerTitle: false,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -148,7 +253,7 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Benevolent Welfare Constitution',
+              'Welfare Constitution Book',
               style: GoogleFonts.outfit(
                 color: Colors.white,
                 fontSize: 17,
@@ -156,1152 +261,1195 @@ class _TermsAndConditionsScreenState extends State<TermsAndConditionsScreen> {
               ),
             ),
             Text(
-              'Official Policies & Code of Conduct',
+              _continuousScrollMode
+                  ? 'Continuous Reading View'
+                  : (_isBookOpen ? 'Page ${_currentPage + 1} of $_totalPages' : 'Official Sealed Volume'),
               style: GoogleFonts.outfit(
-                color: AppColors.secondary,
+                color: AppColors.gold,
                 fontSize: 11,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 letterSpacing: 0.5,
               ),
             ),
           ],
         ),
-      ),
-      body: SafeArea(
-        bottom: true,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(18.0, 20.0, 18.0, 36.0 + MediaQuery.of(context).padding.bottom),
-          child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ─── HERO HEADER BANNER ──────────────────────────────────────────
-            _buildHeroHeader(),
-            const SizedBox(height: 20),
-
-            // ─── GUIDING SCRIPTURE CARD ──────────────────────────────────────
-            _buildScriptureCard(),
-            const SizedBox(height: 22),
-
-            // ─── CORE PRINCIPLES WITH NICE UNDERLINING ───────────────────────
-            _buildCorePrinciplesSection(),
-            const SizedBox(height: 24),
-
-            // ─── KEY FINANCIAL NUMBERS / AT A GLANCE ────────────────────────
-            _buildFinancialHighlights(),
-            const SizedBox(height: 28),
-
-            // ─── SEARCH / FILTER BOX ─────────────────────────────────────────
-            _buildSearchBox(),
-            const SizedBox(height: 20),
-
-            // ─── MINUTES & ADOPTION NOTICE ───────────────────────────────────
-            _buildMinutesMetadataCard(),
-            const SizedBox(height: 22),
-
-            // ─── DETAILED CONSTITUTION ARTICLES ──────────────────────────────
-            ..._buildConstitutionClauses(),
-
-            const SizedBox(height: 24),
-
-            // ─── CONFIRMATION & SIGNATURES CARD ──────────────────────────────
-            _buildSignaturesCard(),
-
-            const SizedBox(height: 30),
-
-            // ─── INTERACTIVE ACCEPTANCE & ABIDE SECTION ──────────────────────
-            _buildAgreementSection(),
-
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    ),
-  );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // HERO HEADER
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildHeroHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryDark, AppColors.primary, Color(0xFF1E6FD9)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryDark.withOpacity(0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+        actions: [
+          IconButton(
+            tooltip: 'Table of Contents',
+            icon: const Icon(Icons.format_list_bulleted_rounded, color: Colors.white),
+            onPressed: _openTableOfContents,
+          ),
+          IconButton(
+            tooltip: _continuousScrollMode ? 'Switch to Book View' : 'Switch to Scroll View',
+            icon: Icon(
+              _continuousScrollMode ? Icons.auto_stories_rounded : Icons.view_headline_rounded,
+              color: AppColors.gold,
+            ),
+            onPressed: () {
+              setState(() {
+                _continuousScrollMode = !_continuousScrollMode;
+                if (!_continuousScrollMode) {
+                  _isBookOpen = true;
+                }
+              });
+            },
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+      body: SafeArea(
+        bottom: true,
+        child: _continuousScrollMode
+            ? _buildContinuousScrollView()
+            : (!_isBookOpen ? _buildBookCoverView() : _buildPagedBookView()),
+      ),
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // VIEW 1: THE MAJESTIC BOOK COVER VIEW
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildBookCoverView() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(context).padding.bottom),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Realistic Hardcover Book Presentation
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxWidth: 420),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F254B), Color(0xFF081833), Color(0xFF040D1D)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: const Icon(Icons.menu_book_rounded, color: Colors.white, size: 26),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFD4AF37), width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFD4AF37).withOpacity(0.22),
+                    blurRadius: 30,
+                    offset: const Offset(0, 12),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.6),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.gold.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.gold.withOpacity(0.6)),
+              child: Stack(
+                children: [
+                  // Bookmark Ribbon Graphic
+                  Positioned(
+                    top: 0,
+                    right: 32,
+                    child: Container(
+                      width: 28,
+                      height: 56,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFDC2626),
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(6)),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2)),
+                        ],
                       ),
-                      child: Text(
-                        'OFFICIAL GOVERNING CHARTER',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.gold,
-                          letterSpacing: 1.5,
+                      child: const Center(
+                        child: Icon(Icons.bookmark_rounded, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                    child: Column(
+                      children: [
+                        // Embossed Crest Seal
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF142C57),
+                            border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFD4AF37).withOpacity(0.35),
+                                blurRadius: 16,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 40),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 20),
+
+                        // Gold Sub-banner
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37).withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFD4AF37)),
+                          ),
+                          child: Text(
+                            'OFFICIAL RATIFIED GOVERNANCE',
+                            style: GoogleFonts.outfit(
+                              color: const Color(0xFFFDE68A),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Book Title
+                        Text(
+                          'THE CONSTITUTION',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cinzel(
+                            color: const Color(0xFFFFFBEB),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '& WELFARE POLICIES',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cinzel(
+                            color: const Color(0xFFD4AF37),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'ONEFELLOWSHIP BENEVOLENT FUND',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                        const Divider(color: Color(0xFFD4AF37), thickness: 1, indent: 40, endIndent: 40),
+                        const SizedBox(height: 14),
+
+                        // Scripture quote on cover
+                        Text(
+                          '“Let all things be done decently and in order.”',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.playfairDisplay(
+                            color: const Color(0xFFFEF3C7),
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '1st Corinthians 14:40',
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFFD4AF37),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Book Details Pill Row
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildCoverBadge(Icons.menu_book, '9 Chapters'),
+                            const SizedBox(width: 8),
+                            _buildCoverBadge(Icons.calendar_month, 'Nov 2026'),
+                            const SizedBox(width: 8),
+                            _buildCoverBadge(Icons.verified, 'Ratified'),
+                          ],
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // OPEN BOOK BUTTON (Full width, generous, never squeezed)
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4AF37),
+                              foregroundColor: const Color(0xFF0B192C),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 8,
+                              shadowColor: const Color(0xFFD4AF37).withOpacity(0.5),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isBookOpen = true;
+                                _currentPage = 0;
+                              });
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.auto_stories_rounded, color: Color(0xFF0B192C), size: 24),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'CLICK TO OPEN BOOK',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // Continuous View Alternative
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _continuousScrollMode = true;
+                            });
+                          },
+                          icon: const Icon(Icons.view_headline_rounded, color: Colors.white70, size: 16),
+                          label: Text(
+                            'Or browse in Continuous Scroll view',
+                            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13, decoration: TextDecoration.underline),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'OneFellowship Welfare Fund',
-                      style: GoogleFonts.outfit(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Formally deliberated, approved, and enacted during the Benevolent Meeting to protect all members, maintain transparent stewardship, and guarantee emergency solidarity.',
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              color: Colors.white.withOpacity(0.92),
-              height: 1.5,
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoverBadge(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: const Color(0xFFD4AF37), size: 13),
+          const SizedBox(width: 5),
+          Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // GUIDING SCRIPTURE
+  // VIEW 2: THE PAGED BOOK SPREAD (SWIPEABLE PAGES)
   // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildScriptureCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withOpacity(0.4), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.gold.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+  Widget _buildPagedBookView() {
+    return Column(
+      children: [
+        // Top Book Ribbon & Navigation Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: const Color(0xFF0B172A),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  setState(() => _isBookOpen = false);
+                },
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Color(0xFFD4AF37)),
+                label: Text(
+                  'Book Cover',
+                  style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD4AF37).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5)),
+                ),
+                child: Text(
+                  'Page ${_currentPage + 1} of $_totalPages',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFFDE68A),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.list_alt_rounded, color: Colors.white),
+                tooltip: 'Table of Contents',
+                onPressed: _openTableOfContents,
+              ),
+            ],
+          ),
+        ),
+
+        // The Page View
+        Expanded(
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _totalPages,
+            onPageChanged: (idx) {
+              setState(() => _currentPage = idx);
+            },
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAF7F0), // Authentic book parchment paper tone
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE2D6C5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Stack(
+                      children: [
+                        // Left Spine Crease Effect
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 14,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.black.withOpacity(0.12),
+                                  Colors.black.withOpacity(0.04),
+                                  Colors.transparent,
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // Page Content
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Chapter Top Ornament
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('⚜️ ', style: TextStyle(fontSize: 14)),
+                                  Text(
+                                    'CHAPTER ${index + 1}',
+                                    style: GoogleFonts.cinzel(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF92400E),
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  const Text(' ⚜️', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Center(
+                                child: Text(
+                                  _chapterTitles[index],
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Center(
+                                child: Container(
+                                  width: 60,
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD4AF37),
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Dynamic Chapter Page Content
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  physics: const BouncingScrollPhysics(),
+                                  child: _buildChapterContent(index),
+                                ),
+                              ),
+
+                              // Page Footer
+                              const SizedBox(height: 10),
+                              const Divider(color: Color(0xFFE2D6C5), height: 1),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'OneFellowship • Benevolent Constitution',
+                                    style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    '— Page ${index + 1} —',
+                                    style: GoogleFonts.cinzel(fontSize: 11, color: const Color(0xFF92400E), fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        // Un-Squeezed Turn Page Navigation Footer
+        Container(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + MediaQuery.of(context).padding.bottom),
+          color: const Color(0xFF0F172A),
+          child: Row(
+            children: [
+              // PREVIOUS BUTTON
+              if (_currentPage > 0)
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      },
+                      icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                      label: Text('Prev Page', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: Colors.white24),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => setState(() => _isBookOpen = false),
+                      icon: const Icon(Icons.book_rounded, size: 18),
+                      label: Text('Cover Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                ),
+
+              const SizedBox(width: 14),
+
+              // NEXT BUTTON OR AFFIRM BUTTON
+              if (_currentPage < _totalPages - 1)
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD4AF37),
+                        foregroundColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      },
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                      label: Text('Next Page', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14)),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        // Action for final page
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please check the agreement box below to complete ratification.')),
+                        );
+                      },
+                      icon: const Icon(Icons.check_circle_rounded, size: 18),
+                      label: Text('Ratify & Agree', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // CHAPTER CONTENT PAGES
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildChapterContent(int index) {
+    switch (index) {
+      case 0:
+        return _buildPreamblePage();
+      case 1:
+        return _buildRegistrationPage();
+      case 2:
+        return _buildCommitmentFeePage();
+      case 3:
+        return _buildMinimumContributionPage();
+      case 4:
+        return _buildMembersCoveredPage();
+      case 5:
+        return _buildOccasionsCoveredPage();
+      case 6:
+        return _buildAuthorizationPage();
+      case 7:
+        return _buildDisciplinePage();
+      case 8:
+        return _buildRatificationPage();
+      default:
+        return const SizedBox();
+    }
+  }
+
+  // Page 1: Preamble & Scripture
+  Widget _buildPreamblePage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF59E0B)),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.format_quote_rounded, color: Color(0xFFB45309), size: 30),
+              const SizedBox(height: 6),
+              Text(
+                '“Let all things be done decently and in order.”',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontStyle: FontStyle.italic,
+                  color: const Color(0xFF78350F),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '— 1st Corinthians 14:40 (Amen)',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFFB45309)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Five Core Welfare Principles',
+          style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+        ),
+        const SizedBox(height: 10),
+        _buildParchmentBullet(Icons.visibility_rounded, 'Transparency and Accountability', 'Open financial records, auditable disbursements, and regular member accounting.'),
+        _buildParchmentBullet(Icons.diversity_3_rounded, 'Unity and Mutual Support', 'Standing together in solidarity during seasons of grief, joy, and acute member hardship.'),
+        _buildParchmentBullet(Icons.verified_user_rounded, 'Integrity and Responsible Leadership', 'Fiduciary stewardship without personal bias or conflict of interest.'),
+        _buildParchmentBullet(Icons.handshake_rounded, 'Respect for Members and Officials', 'Mutual dignity across leadership and general membership at all times.'),
+        _buildParchmentBullet(Icons.how_to_vote_rounded, 'Collective Decision Making', 'Constitutional amendments and critical resolutions enacted by member consensus.'),
+      ],
+    );
+  }
+
+  // Page 2: Membership Registration
+  Widget _buildRegistrationPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 1', 'Membership Requirements'),
+        const SizedBox(height: 12),
+        _buildParchmentText('Every registered member shall fulfill the following mandatory KYC requirements:'),
+        const SizedBox(height: 10),
+        _buildParchmentItem('i.', 'Full legal names and primary contact details (mobile phone and email).'),
+        _buildParchmentItem('ii.', 'Name, contact details, relationship, and verified identification of designated Next of Kin.'),
+        _buildParchmentItem('iii.', 'A verified copy of National ID card, Passport, or recognized identification document.'),
+        _buildParchmentItem('iv.', 'Administrative and origin location: County, Sub-County, Ward, and Village / Estate.'),
+        _buildParchmentItem('v.', 'Any other document deemed necessary by the Welfare Committee to verify eligibility.'),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF10B981)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Membership shall become active upon full completion of registration requirements and payment of the commitment fee.',
+                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF065F46)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Page 3: Commitment Fee
+  Widget _buildCommitmentFeePage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 2', 'Commitment Fee Policy'),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Text('One-Time Commitment Fee', style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B))),
+              const SizedBox(height: 4),
+              Text('KES 1,000', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A))),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(8)),
+                child: Text('STRICTLY NON-REFUNDABLE', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFB91C1C))),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildParchmentBullet(Icons.lock_clock_rounded, 'Upfront Payment', 'Commitment contributions shall be paid upfront within stipulated timelines to activate membership benefits.'),
+        _buildParchmentBullet(Icons.balance_rounded, 'Equal Application', 'The commitment contribution amount shall apply equally to all eligible welfare members unless amended by general consensus.'),
+      ],
+    );
+  }
+
+  // Page 4: Minimum Proposed Contribution
+  Widget _buildMinimumContributionPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 3', 'Minimum Proposed Contribution'),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF10B981), width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Text('Minimum Contribution Threshold', style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B))),
+              const SizedBox(height: 4),
+              Text('KES 1,000', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.w900, color: const Color(0xFF047857))),
+              const SizedBox(height: 4),
+              Text('Per member per eligible welfare case', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF065F46))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildParchmentText('All active members mutually agree to contribute at least KES 1,000 towards each approved benevolent occasion.'),
+        const SizedBox(height: 10),
+        _buildParchmentBullet(Icons.favorite_rounded, 'Solidarity Fund', 'Contributions are pooled transparently to ensure immediate family relief and dignified support.'),
+      ],
+    );
+  }
+
+  // Page 5: Members Covered
+  Widget _buildMembersCoveredPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 4', 'Members Covered Under Fund'),
+        const SizedBox(height: 12),
+        _buildParchmentText('The benevolent welfare fund strictly covers the following nuclear family entities:'),
+        const SizedBox(height: 12),
+        _buildParchmentBullet(Icons.person, 'The Registered Member', 'The primary account holder in active standing.'),
+        _buildParchmentBullet(Icons.favorite, 'Legally Recognized Spouse', 'Declared spouse verified via marriage certificate or declaration.'),
+        _buildParchmentBullet(Icons.child_care, 'Biological or Adopted Children', 'Registered dependants with birth certificate or legal adoption papers.'),
+        _buildParchmentBullet(Icons.elderly, 'Biological Parents', 'Mother and father of the registered member.'),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFF59E0B)),
+          ),
+          child: Text(
+            '⚠️ IMPORTANT KYC RULE: Only the person declared during registration or officially updated thereafter shall qualify for benefits.',
+            style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF92400E), height: 1.3),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Page 6: Covered Occasions & Timelines
+  Widget _buildOccasionsCoveredPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 5', 'Covered Occasions & Timelines'),
+        const SizedBox(height: 12),
+        _buildParchmentBullet(
+          Icons.sentiment_very_dissatisfied_rounded,
+          'Bereavement & Funeral Support',
+          'Notice must be formally communicated at least 3 days before the burial date.',
+        ),
+        const SizedBox(height: 8),
+        _buildParchmentBullet(
+          Icons.celebration_rounded,
+          'Weddings & Approved Celebrations',
+          'Formal notice and invitation submitted at least 2 weeks before the wedding date.',
+        ),
+        const SizedBox(height: 8),
+        _buildParchmentBullet(
+          Icons.emergency_rounded,
+          'Other Critical Emergencies',
+          'Hospitalization, acute distress, or emergencies as formally approved by members.',
+        ),
+      ],
+    );
+  }
+
+  // Page 7: Transaction Authorization
+  Widget _buildAuthorizationPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 6', 'Authorization of Transactions'),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Mandatory Triple Authorization Rule', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13.5, color: const Color(0xFF0F172A))),
+              const SizedBox(height: 6),
+              Text(
+                'All withdrawals, payments, and disbursements from the welfare account must be authorized jointly by:',
+                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569)),
+              ),
+              const SizedBox(height: 8),
+              _buildAuthorityChip('1. Office of the Chairperson'),
+              _buildAuthorityChip('2. Office of the Secretary'),
+              _buildAuthorityChip('3. Office of the Treasurer'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildParchmentBullet(
+          Icons.gavel_rounded,
+          'Strict Solo Prohibition',
+          'No single official shall independently authorize withdrawal or disbursement of welfare funds under any circumstance.',
+        ),
+        _buildParchmentBullet(
+          Icons.receipt_long_rounded,
+          'Documentation & Receipts',
+          'All financial transactions must be properly documented, backed by verified receipts and bank/M-Pesa statements.',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAuthorityChip(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline, color: Color(0xFF0284C7), size: 16),
+          const SizedBox(width: 8),
+          Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 12.5, color: const Color(0xFF0369A1))),
+        ],
+      ),
+    );
+  }
+
+  // Page 8: Disciplinary Measures & Fraud Safeguards
+  Widget _buildDisciplinePage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 7', 'Discipline & Anti-Fraud Safeguards'),
+        const SizedBox(height: 12),
+        _buildParchmentBullet(
+          Icons.warning_amber_rounded,
+          'Two-Case Default Rule',
+          'A member who fails to submit contributions for two consecutive welfare cases shall be liable to termination of membership.',
+        ),
+        _buildParchmentBullet(
+          Icons.timer_rounded,
+          '7-Day Grace Period',
+          'Any late submission will be given a grace period of 7 calendar days before penalties apply.',
+        ),
+        _buildParchmentBullet(
+          Icons.contact_phone_rounded,
+          'Next of Kin Notification',
+          'The member’s registered Next of Kin shall be officially notified when termination proceedings arise.',
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEE2E2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFEF4444)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Misappropriation & Embezzlement Policy', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF991B1B))),
+              const SizedBox(height: 4),
+              Text(
+                'In case of any embezzlement of funds, the Treasurer or implicated official shall immediately be restricted from accessing welfare accounts. An independent church audit team shall investigate, and legal action will be taken under applicable Kenyan laws.',
+                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF7F1D1D), height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Page 9: Ratification & Affirmation
+  Widget _buildRatificationPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildArticleBadge('Article 8', 'Ratification & Digital Affirmation'),
+        const SizedBox(height: 12),
+        _buildParchmentText('Ratified by the Executive Governance and Church Fellowship:'),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade300)),
+                child: Column(
+                  children: [
+                    const Icon(Icons.history_edu_rounded, color: Color(0xFFD4AF37), size: 24),
+                    const SizedBox(height: 4),
+                    Text('Chairperson', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text('Executive Office', style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade300)),
+                child: Column(
+                  children: [
+                    const Icon(Icons.draw_rounded, color: Color(0xFFD4AF37), size: 24),
+                    const SizedBox(height: 4),
+                    Text('Secretary', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text('Records & Notice', style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade300)),
+                child: Column(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFFD4AF37), size: 24),
+                    const SizedBox(height: 4),
+                    Text('Treasurer', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text('Treasury Office', style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
+        // DIGITAL AFFIRMATION AGREEMENT CARD
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _hasAgreed ? const Color(0xFFECFDF5) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _hasAgreed ? AppColors.success : const Color(0xFFD4AF37), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: (_hasAgreed ? AppColors.success : const Color(0xFFD4AF37)).withOpacity(0.08),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _hasAgreed ? Icons.verified_rounded : Icons.gavel_rounded,
+                    color: _hasAgreed ? AppColors.success : const Color(0xFFB45309),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Digital Affirmation & Agreement',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _hasAgreed,
+                    activeColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    onChanged: _isSavingAgreement ? null : _toggleAgreement,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!_isSavingAgreement) _toggleAgreement(!_hasAgreed);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'I have read, understood, and solemnly agree to abide by all the rules, constitution, KES 1,000 commitment fee, KES 1,000 minimum contributions, 7-day grace period, and disciplinary guidelines of OneFellowship.',
+                          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_hasAgreed && _agreedAtDate != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '✅ Bound & digitally ratified on ${_agreedAtDate!.length >= 10 ? _agreedAtDate!.substring(0, 10) : _agreedAtDate}',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // VIEW 3: CONTINUOUS SCROLL VIEW (FOR READERS WHO PREFER SCROLLING)
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildContinuousScrollView() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + MediaQuery.of(context).padding.bottom),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCoverBadge(Icons.auto_stories, 'Continuous Scroll Mode'),
+          const SizedBox(height: 14),
+          ...List.generate(_totalPages, (i) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAF7F0),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE2D6C5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: const Color(0xFFD4AF37), borderRadius: BorderRadius.circular(8)),
+                        child: Text('CHAPTER ${i + 1}', style: GoogleFonts.cinzel(color: const Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _chapterTitles[i],
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF0F172A)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _buildChapterContent(i),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // HELPER WIDGETS
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildArticleBadge(String badge, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFFD4AF37).withOpacity(0.2),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFD4AF37)),
+          ),
+          child: Text(
+            badge.toUpperCase(),
+            style: GoogleFonts.outfit(color: const Color(0xFF78350F), fontWeight: FontWeight.w800, fontSize: 10.5),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildParchmentText(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF334155), height: 1.45),
+    );
+  }
+
+  Widget _buildParchmentItem(String prefix, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text(prefix, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF92400E))),
+          ),
+          Expanded(
+            child: Text(body, style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF334155), height: 1.4)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildParchmentBullet(IconData icon, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFD4AF37).withOpacity(0.15),
+              shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.format_quote_rounded, color: Color(0xFFD97706), size: 28),
+            child: Icon(icon, color: const Color(0xFF92400E), size: 16),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Guiding Scripture',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFB45309),
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '“Let all things be done decently and in order.”',
-                  style: GoogleFonts.outfit(
-                    fontSize: 15,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '1st Corinthians 14:40 (Amen)',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
+                Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF0F172A))),
+                const SizedBox(height: 2),
+                Text(desc, style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569), height: 1.35)),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // CORE PRINCIPLES
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildCorePrinciplesSection() {
-    final principles = [
-      {'title': 'Transparency & Accountability', 'icon': Icons.visibility_rounded, 'color': Color(0xFF0B4FBB)},
-      {'title': 'Unity & Mutual Support', 'icon': Icons.diversity_3_rounded, 'color': Color(0xFF0D9488)},
-      {'title': 'Integrity & Responsible Leadership', 'icon': Icons.verified_user_rounded, 'color': Color(0xFFD97706)},
-      {'title': 'Respect for Members & Officials', 'icon': Icons.handshake_rounded, 'color': Color(0xFF7C3AED)},
-      {'title': 'Collective Decision Making', 'icon': Icons.how_to_vote_rounded, 'color': Color(0xFF2563EB)},
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(
-          title: 'General Benevolent Welfare Principles',
-          subtitle: 'The foundational ethos guiding every welfare decision and action',
-          icon: Icons.stars_rounded,
-          accentColor: AppColors.primary,
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: principles.map((p) {
-            final color = p['color'] as Color;
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: color.withOpacity(0.2)),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.06),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(p['icon'] as IconData, color: color, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    p['title'] as String,
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // FINANCIAL HIGHLIGHTS
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildFinancialHighlights() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(
-          title: 'Financial Parameters & Key Deadlines',
-          subtitle: 'Enforceable monetary thresholds and statutory notice periods',
-          icon: Icons.payments_rounded,
-          accentColor: const Color(0xFF10B981),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _buildMetricTile(
-                title: 'Commitment Fee',
-                value: 'KES 1,000',
-                note: 'One-time per case • Strictly non-refundable',
-                color: AppColors.primary,
-                icon: Icons.badge_rounded,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricTile(
-                title: 'Min. Contribution',
-                value: 'KES 1,000',
-                note: 'Applies equally per member',
-                color: const Color(0xFF10B981),
-                icon: Icons.savings_rounded,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildMetricTile(
-                title: 'Triple Authorization',
-                value: '3 Sign-Offs',
-                note: 'Chair + Secretary + Treasurer required',
-                color: const Color(0xFFD97706),
-                icon: Icons.lock_person_rounded,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricTile(
-                title: 'Default Grace Period',
-                value: '7 Days',
-                note: '2 consecutive misses = Termination',
-                color: AppColors.danger,
-                icon: Icons.timer_outlined,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricTile({
-    required String title,
-    required String value,
-    required String note,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            note,
-            style: GoogleFonts.outfit(
-              fontSize: 10.5,
-              color: AppColors.textMuted,
-              height: 1.3,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // SEARCH BOX
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildSearchBox() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: TextField(
-        onChanged: (val) => setState(() => _searchFilter = val.trim().toLowerCase()),
-        style: GoogleFonts.outfit(fontSize: 13.5),
-        decoration: InputDecoration(
-          hintText: 'Search clauses (e.g., funeral, fraud, kin, appeal, 1000)...',
-          hintStyle: GoogleFonts.outfit(color: AppColors.textMuted, fontSize: 13),
-          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary, size: 20),
-          suffixIcon: _searchFilter.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 18),
-                  onPressed: () => setState(() => _searchFilter = ''),
-                )
-              : null,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-      ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // MINUTES METADATA CARD
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildMinutesMetadataCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blueGrey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.verified_rounded, color: AppColors.primaryDark, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Policy Adoption & Enactment',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryDark,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryDark,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'RATIFIED',
-                  style: GoogleFonts.outfit(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Formally Adopted on Friday 6th November 2026',
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Official welfare constitution and binding policies enacted to govern member registration, commitment contributions, emergency allocations, and financial stewardship.',
-            style: GoogleFonts.outfit(
-              fontSize: 11.5,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // CONSTITUTION CLAUSES
-  // ───────────────────────────────────────────────────────────────────────────
-  List<Widget> _buildConstitutionClauses() {
-    final clauses = [
-      {
-        'number': '1',
-        'title': 'Membership Registration & Qualification',
-        'icon': Icons.how_to_reg_rounded,
-        'accent': const Color(0xFF0B4FBB),
-        'summary': 'Mandatory legal identification and onboarding prerequisites',
-        'items': [
-          'Every registered member shall provide their full legal names and active contact details.',
-          'Every member must designate their Next of Kin, providing verified full names, active phone contact, and unique national identification (National ID card number or Birth Certificate number).',
-          'A verifiable copy / record of National ID card, Birth Certificate, or other government-issued identification document is mandatory for all members and next of kin.',
-          'The Welfare Committee reserves the right to request any other document deemed necessary for audit and identity validation.',
-          'Membership status shall only become ACTIVE upon full completion of registration requirements and upfront payment of the commitment fee.',
-        ],
-      },
-      {
-        'number': '2',
-        'title': 'Commitment Fee Policy',
-        'icon': Icons.account_balance_wallet_rounded,
-        'accent': const Color(0xFF0284C7),
-        'summary': 'One-time onboarding and case protection fee',
-        'items': [
-          'A one-time membership commitment fee of KES 1,000 per case is instituted for all active members.',
-          'The commitment fee is STRICTLY NON-REFUNDABLE under all circumstances.',
-          'All contributions must be paid upfront within the stipulated timelines communicated by the committee.',
-          'The contribution amount shall apply equally to all eligible welfare cases unless amended through an approved resolution of members.',
-        ],
-      },
-      {
-        'number': '3',
-        'title': 'Minimum Proposed Contribution',
-        'icon': Icons.monetization_on_rounded,
-        'accent': const Color(0xFF059669),
-        'summary': 'Floor contribution per member across all welfare calls',
-        'items': [
-          'The agreed minimum statutory contribution per member is KES 1,000.',
-          'Members are free to contribute voluntary sums above the KES 1,000 threshold to assist distressed brethren.',
-          'No contribution below KES 1,000 shall be accepted as satisfying a member’s welfare obligation.',
-        ],
-      },
-      {
-        'number': '4',
-        'title': 'Members Covered Under the Welfare Fund',
-        'icon': Icons.family_restroom_rounded,
-        'accent': const Color(0xFF7C3AED),
-        'summary': 'Scope of eligible beneficiaries',
-        'items': [
-          'The registered member.',
-          'Their legally recognized spouse.',
-          'Their biological or legally adopted children.',
-          'Their biological parents.',
-          'STRICT BENEFIT CLAUSE: Only persons declared during official member registration or officially updated thereafter through formal notification shall qualify for welfare benefits.',
-        ],
-      },
-      {
-        'number': '5',
-        'title': 'Occasions Covered & Application Timelines',
-        'icon': Icons.event_available_rounded,
-        'accent': const Color(0xFFD97706),
-        'summary': 'Qualifying events and mandatory advance notice periods',
-        'items': [
-          'Bereavement & Funeral Support: Official notification must be submitted AT LEAST 3 DAYS before the scheduled burial.',
-          'Weddings & Other Approved Occasions: Formal welfare request must be lodged AT LEAST 2 WEEKS before the wedding date.',
-          'Other Emergencies: Medical crises or unforeseen distress situations as formally reviewed and agreed upon by the members.',
-        ],
-      },
-      {
-        'number': '6',
-        'title': 'Authorization of Transactions (Financial Control)',
-        'icon': Icons.security_rounded,
-        'accent': const Color(0xFFDC2626),
-        'summary': 'Mandatory multi-signature controls & anti-fraud safeguards',
-        'items': [
-          'TRIPLE AUTHORIZATION RULE: All withdrawals, payments, and disbursements from the welfare fund MUST be jointly authorized by: 1. Chairperson, 2. Secretary, and 3. Treasurer.',
-          'NO INDEPENDENT ACTION: No single official shall independently authorize withdrawal or disbursement of welfare funds under any circumstance.',
-          'DOCUMENTATION MANDATE: All financial transactions must be properly documented, verified, and supported by receipts and official bank/M-Pesa records.',
-          'Any transaction failing triple sign-off is null, void, and subject to immediate freeze.',
-        ],
-      },
-      {
-        'number': '7',
-        'title': 'Disciplinary Measures & Membership Termination',
-        'icon': Icons.gavel_rounded,
-        'accent': const Color(0xFFEA580C),
-        'summary': 'Penalties for default, late remittance, and due process',
-        'items': [
-          'TERMINATION FOR DEFAULT: A member who fails to submit contributions for two (2) consecutive welfare cases shall be liable to immediate termination of membership.',
-          'GRACE PERIOD: Any late submission will be granted a statutory grace period of 7 days from the due date before penalty triggers.',
-          'NEXT OF KIN NOTIFICATION: The member’s registered next of kin shall be formally notified when termination proceedings arise.',
-          'OFFICIAL MISCONDUCT: Any official found engaging in misconduct, abuse of office, or negligence to the welfare constitution shall face immediate suspension from official duties pending disciplinary proceedings.',
-          'RIGHT OF APPEAL: The affected official or member shall have the constitutional right to appeal the disciplinary decision within 7 days.',
-          'FAIRNESS GUARANTEE: Disciplinary proceedings shall strictly uphold fairness, transparency, and the fundamental right of every accused person to be heard.',
-        ],
-      },
-      {
-        'number': '8',
-        'title': 'Misappropriation, Fraud & Independent Audit',
-        'icon': Icons.policy_rounded,
-        'accent': const Color(0xFF991B1B),
-        'summary': 'Strict protocol against embezzlement and financial malfeasance',
-        'items': [
-          'IMMEDIATE RESTRICTION: In case of any suspected embezzlement or misappropriation of funds, the Treasurer (or implicated official) shall immediately be restricted from accessing welfare accounts and funds pending investigation.',
-          'INDEPENDENT AUDIT APPOINTMENT: An independent audit team shall be appointed immediately to investigate the allegations impartially.',
-          'AUDIT REPORT: The investigation report shall establish final facts and evidence before any final determination is made.',
-          'LEGAL ACTION: If found guilty, appropriate disciplinary, recovery, and criminal legal action shall be taken in accordance with the constitution and the laws of Kenya.',
-          'SELECTION BY CHURCH: The entire church membership shall participate in the selection of the Audit and Disciplinary team.',
-          'INDEPENDENCE: The Disciplinary Committee is an autonomous body responsible for examining financial records, transactions, accountability, and the general financial health of the welfare fund.',
-        ],
-      },
-    ];
-
-    final filtered = clauses.where((c) {
-      if (_searchFilter.isEmpty) return true;
-      final q = _searchFilter;
-      final title = (c['title'] as String).toLowerCase();
-      final summary = (c['summary'] as String).toLowerCase();
-      final items = (c['items'] as List<String>).join(' ').toLowerCase();
-      return title.contains(q) || summary.contains(q) || items.contains(q);
-    }).toList();
-
-    if (filtered.isEmpty) {
-      return [
-        Container(
-          padding: const EdgeInsets.all(24),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              const Icon(Icons.search_off_rounded, size: 40, color: AppColors.textMuted),
-              const SizedBox(height: 8),
-              Text(
-                'No clauses match "$_searchFilter"',
-                style: GoogleFonts.outfit(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      ];
-    }
-
-    return filtered.map((clause) {
-      final accent = clause['accent'] as Color;
-      return Container(
-        margin: const EdgeInsets.only(bottom: 18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withOpacity(0.15), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Clause Header with color band
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
-                color: accent.withOpacity(0.06),
-                border: Border(bottom: BorderSide(color: accent.withOpacity(0.12))),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      clause['number'] as String,
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          clause['title'] as String,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        // Underline accent indicator
-                        Container(
-                          margin: const EdgeInsets.only(top: 4),
-                          height: 2.5,
-                          width: 40,
-                          decoration: BoxDecoration(
-                            color: accent,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(clause['icon'] as IconData, color: accent, size: 22),
-                ],
-              ),
-            ),
-
-            // Subtitle / Summary
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
-              child: Text(
-                clause['summary'] as String,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-
-            // Clauses list
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
-              child: Column(
-                children: (clause['items'] as List<String>).map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 5),
-                          child: Icon(Icons.circle, size: 7, color: accent),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            item,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              color: const Color(0xFF334155),
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      );
-    }).toList();
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // SIGNATURES & CONFIRMATION
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildSignaturesCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.verified_user_rounded, color: AppColors.primary, size: 22),
-              const SizedBox(width: 10),
-              Text(
-                'Executive Governance & Ratification',
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Underline
-          Container(
-            height: 2,
-            width: 50,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'This constitution and its disciplinary policies were formally approved and adopted on Friday 6th November 2026 as the binding rules for all members and elected leadership.',
-            style: GoogleFonts.outfit(
-              fontSize: 12.5,
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSignatureBox(
-                  role: 'OFFICE OF CHAIRPERSON',
-                  name: 'Executive Chairperson',
-                  title: 'Welfare Leadership Council',
-                  icon: Icons.shield_rounded,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSignatureBox(
-                  role: 'OFFICE OF SECRETARY',
-                  name: 'Executive Secretary',
-                  title: 'Welfare Documentation Office',
-                  icon: Icons.edit_document,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSignatureBox({
-    required String role,
-    required String name,
-    required String title,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Text(
-                role,
-                style: GoogleFonts.outfit(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            name,
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          Text(
-            title,
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              color: AppColors.textMuted,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.check, size: 12, color: AppColors.success),
-                const SizedBox(width: 4),
-                Text(
-                  'CONFIRMED',
-                  style: GoogleFonts.outfit(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.success,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // INTERACTIVE ACCEPTANCE & ABIDE SECTION
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildAgreementSection() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: _hasAgreed ? AppColors.success : AppColors.primary,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (_hasAgreed ? AppColors.success : AppColors.primary).withOpacity(0.12),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: (_hasAgreed ? AppColors.success : AppColors.primary).withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _hasAgreed ? Icons.verified_rounded : Icons.thumb_up_alt_rounded,
-                  color: _hasAgreed ? AppColors.success : AppColors.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Member Adherence Affirmation',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      _hasAgreed
-                          ? 'You are in good standing & bound by this constitution'
-                          : 'Mandatory for all active fellowship participants',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: _hasAgreed ? AppColors.success : AppColors.textSecondary,
-                        fontWeight: _hasAgreed ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Checkbox(
-                  value: _hasAgreed,
-                  activeColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                  onChanged: _isSavingAgreement ? null : _toggleAgreement,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _isSavingAgreement ? null : () => _toggleAgreement(!_hasAgreed),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        'I have carefully read, fully understood, and solemnly agree to abide by all the rules, contributions, deadlines, and disciplinary measures of the OneFellowship Benevolent Welfare Fund.',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_hasAgreed && _agreedAtDate != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Affirmed & signed digitally: ${_formatDate(_agreedAtDate!)}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(String isoString) {
-    try {
-      final dt = DateTime.parse(isoString);
-      return '${dt.day}/${dt.month}/${dt.year} at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return isoString;
-    }
-  }
-
-  Widget _buildSectionTitle({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color accentColor,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: accentColor, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 2.5,
-          width: 36,
-          decoration: BoxDecoration(
-            color: accentColor,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -460,21 +461,37 @@ class SupabaseService {
 
   static Future<void> adminAddExpense(Map<String, dynamic> data) async {
     final docRef = _firestore.collection('organization_expenses').doc();
+    final now = DateTime.now().toIso8601String();
+    final pBy = data['recorded_by_name'] ?? currentUser?.displayName ?? 'Admin';
+    final pRole = data['recorded_by_role'] ?? 'Leadership Official';
+
     final payload = {
       'id': docRef.id,
       ...data,
-      if (!data.containsKey('created_at')) 'created_at': DateTime.now().toIso8601String(),
+      'recorded_by_name': pBy,
+      'recorded_by_role': pRole,
+      'recorded_by_id': currentUser?.id,
+      if (!data.containsKey('created_at')) 'created_at': now,
+      if (!data.containsKey('expense_date')) 'expense_date': now.split('T')[0],
     };
     await docRef.set(payload);
 
     await logAuditEvent(
       action: 'EXPENSE_RECORDED',
       title: 'Expense Recorded: KES ${data['amount']}',
-      description: '${data['description'] ?? 'No notes'} (${data['type'] ?? 'expense'})',
+      description: '${data['description'] ?? 'No notes'} (${data['type'] ?? 'expense'}) - Recorded by $pBy ($pRole)',
       category: 'expenses',
-      performedBy: currentUser?.displayName ?? 'Admin',
+      performedBy: pBy.toString(),
       performedById: currentUser?.id,
-      metadata: {'amount': data['amount'], 'type': data['type']},
+      performedByRole: pRole.toString(),
+      metadata: {
+        'amount': data['amount'],
+        'type': data['type'],
+        'status': data['status'] ?? 'pending',
+        'recorded_by_name': pBy,
+        'recorded_by_role': pRole,
+        'expense_date': payload['expense_date'],
+      },
     );
   }
 
@@ -488,15 +505,22 @@ class SupabaseService {
     }
     await _firestore.collection('organization_expenses').doc(id).update(updateData);
 
+    final approverName = auditTrail?['approved_by_name'] ?? currentUser?.displayName ?? 'Official';
+    final approverRole = auditTrail?['approver_role'] ?? auditTrail?['authorized_role'] ?? 'Leadership Official';
+
     await logAuditEvent(
       action: status == 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED',
-      title: 'Expense $status: ID $id',
-      description: 'Status changed to $status by ${auditTrail?['approver_role'] ?? 'Official'}',
+      title: 'Expense ${status.toUpperCase()}: ID $id',
+      description: 'Status updated to ${status.toUpperCase()} by $approverName ($approverRole)',
       category: 'expenses',
-      performedBy: auditTrail?['approved_by_name'] ?? currentUser?.displayName ?? 'Official',
+      performedBy: approverName.toString(),
       performedById: auditTrail?['approved_by_id'] ?? currentUser?.id,
-      performedByRole: auditTrail?['approver_role']?.toString(),
-      metadata: auditTrail ?? {},
+      performedByRole: approverRole.toString(),
+      metadata: {
+        'expense_id': id,
+        'status': status,
+        if (auditTrail != null) ...auditTrail,
+      },
     );
   }
 
@@ -512,37 +536,151 @@ class SupabaseService {
     String? performedByRole,
     Map<String, dynamic>? metadata,
   }) async {
+    final now = DateTime.now().toIso8601String();
+    final u = currentUser;
+    final logId = 'log_${DateTime.now().millisecondsSinceEpoch}';
+
+    final logData = <String, dynamic>{
+      'id': logId,
+      'action': action,
+      'title': title,
+      'description': description,
+      'category': category,
+      'performed_by': performedBy ?? u?.displayName ?? 'Admin Official',
+      'performed_by_id': performedById ?? u?.id ?? 'admin',
+      'performed_by_role': performedByRole ?? 'Official',
+      'metadata': metadata ?? {},
+      'created_at': now,
+    };
+
+    // 1. Cache to local storage immediately
     try {
-      final u = currentUser;
-      final docRef = _firestore.collection('audit_logs').doc();
-      final now = DateTime.now().toIso8601String();
-      await docRef.set({
-        'id': docRef.id,
-        'action': action,
-        'title': title,
-        'description': description,
-        'category': category,
-        'performed_by': performedBy ?? u?.displayName ?? 'Admin',
-        'performed_by_id': performedById ?? u?.id ?? 'admin',
-        'performed_by_role': performedByRole ?? 'Official',
-        'metadata': metadata ?? {},
-        'created_at': now,
-      });
+      final prefs = await SharedPreferences.getInstance();
+      final cachedRaw = prefs.getStringList('offline_audit_logs_v1') ?? [];
+      cachedRaw.insert(0, jsonEncode(logData));
+      if (cachedRaw.length > 300) cachedRaw.removeLast();
+      await prefs.setStringList('offline_audit_logs_v1', cachedRaw);
     } catch (e) {
-      debugPrint('logAuditEvent error: $e');
+      debugPrint('Error caching audit log to SharedPreferences: $e');
+    }
+
+    // 2. Write to Firestore
+    try {
+      final docRef = _firestore.collection('audit_logs').doc();
+      logData['id'] = docRef.id;
+      await docRef.set(logData);
+    } catch (e) {
+      debugPrint('logAuditEvent firestore error: $e');
     }
   }
 
   static Future<List<Map<String, dynamic>>> fetchAuditLogs() async {
+    final Map<String, Map<String, dynamic>> combined = {};
+
+    // 1. Fetch from Firestore audit_logs collection
     try {
       final snap = await _firestore.collection('audit_logs').get();
-      final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-      list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
-      return list;
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final key = '${d['action']}_${d['title']}_${d['created_at']}';
+        combined[key] = {'id': doc.id, ...d};
+      }
     } catch (e) {
-      debugPrint('fetchAuditLogs error: $e');
-      return [];
+      debugPrint('fetchAuditLogs (firestore audit_logs) error: $e');
     }
+
+    // 2. Fetch from local cached audit logs
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedRaw = prefs.getStringList('offline_audit_logs_v1') ?? [];
+      for (final raw in cachedRaw) {
+        try {
+          final d = jsonDecode(raw) as Map<String, dynamic>;
+          final key = '${d['action']}_${d['title']}_${d['created_at']}';
+          if (!combined.containsKey(key)) {
+            combined[key] = d;
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('fetchAuditLogs (local cache) error: $e');
+    }
+
+    // 3. Fallback/Backfill: Synthesize from Firestore 'notifications' collection
+    try {
+      final notifSnap = await _firestore.collection('notifications').get();
+      for (final doc in notifSnap.docs) {
+        final nd = doc.data();
+        final title = (nd['title'] ?? 'Announcement').toString();
+        final msg = (nd['message'] ?? '').toString();
+        final by = nd['sender_name'] ?? nd['created_by'] ?? 'Admin Official';
+        final role = nd['sender_role'] ?? 'Authority / Leader';
+        final time = (nd['created_at'] ?? '').toString();
+        final key = 'NOTIFICATION_SENT_${title}_$time';
+
+        if (!combined.containsKey(key)) {
+          combined[key] = {
+            'id': 'notif_${doc.id}',
+            'action': 'NOTIFICATION_SENT',
+            'title': 'Dispatched Notification: "$title"',
+            'description': msg.isNotEmpty ? msg : 'Broadcast notification sent to members.',
+            'category': 'notifications',
+            'performed_by': by,
+            'performed_by_id': nd['sender_id'] ?? 'admin',
+            'performed_by_role': role,
+            'created_at': time.isNotEmpty ? time : DateTime.now().toIso8601String(),
+            'metadata': {
+              'type': nd['type'] ?? 'info',
+              'recipient': nd['recipient'] ?? nd['member_id'] ?? 'All',
+            },
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchAuditLogs (synthesize notifications) error: $e');
+    }
+
+    // 4. Fallback/Backfill: Synthesize from Firestore 'organization_expenses' collection
+    try {
+      final expSnap = await _firestore.collection('organization_expenses').get();
+      for (final doc in expSnap.docs) {
+        final ed = doc.data();
+        final amt = ed['amount'] ?? 0;
+        final type = (ed['type'] ?? 'expense').toString();
+        final desc = (ed['description'] ?? 'Expense').toString();
+        final status = (ed['status'] ?? 'pending').toString().toLowerCase();
+        final by = ed['recorded_by_name'] ?? ed['approved_by_name'] ?? ed['added_by_name'] ?? 'Treasury / Chairperson';
+        final role = ed['recorded_by_role'] ?? ed['authorized_role'] ?? 'Treasurer / Leadership';
+        final time = (ed['created_at'] ?? ed['expense_date'] ?? '').toString();
+        final action = status == 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_RECORDED';
+        final key = '${action}_${amt}_$desc';
+
+        if (!combined.containsKey(key)) {
+          combined[key] = {
+            'id': 'exp_${doc.id}',
+            'action': action,
+            'title': 'Expense Recorded: KES $amt ($type)',
+            'description': '$desc • Status: ${status.toUpperCase()}',
+            'category': 'expenses',
+            'performed_by': by,
+            'performed_by_id': ed['recorded_by_id'] ?? ed['added_by'] ?? 'admin',
+            'performed_by_role': role,
+            'created_at': time.isNotEmpty ? time : DateTime.now().toIso8601String(),
+            'metadata': {
+              'amount': amt,
+              'type': type,
+              'status': status,
+            },
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchAuditLogs (synthesize expenses) error: $e');
+    }
+
+    final list = combined.values.toList();
+    list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+    return list;
   }
 
   // ─── Admin Password Reset ─────────────────────────────────────

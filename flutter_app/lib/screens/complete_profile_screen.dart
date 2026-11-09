@@ -20,8 +20,57 @@ class CompleteProfileScreen extends StatefulWidget {
   State<CompleteProfileScreen> createState() => _CompleteProfileScreenState();
 }
 
+class DependantItem {
+  final TextEditingController nameCtrl;
+  final TextEditingController ageCtrl;
+  final TextEditingController idCtrl;
+  String idType;
+  String relationship;
+
+  DependantItem({
+    String name = '',
+    String age = '',
+    String idNumber = '',
+    this.idType = 'Birth Certificate',
+    this.relationship = 'Child',
+  })  : nameCtrl = TextEditingController(text: name),
+        ageCtrl = TextEditingController(text: age),
+        idCtrl = TextEditingController(text: idNumber);
+
+  void dispose() {
+    nameCtrl.dispose();
+    ageCtrl.dispose();
+    idCtrl.dispose();
+  }
+
+  Map<String, dynamic> toMap() => {
+    'name': nameCtrl.text.trim(),
+    'age': ageCtrl.text.trim(),
+    'id_number': idCtrl.text.trim(),
+    'identification': idCtrl.text.trim(),
+    'id_type': idType,
+    'relationship': relationship,
+  };
+}
+
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+
+  // Dependant controllers & list
+  List<DependantItem> _dependants = [];
+  final List<String> _dependantIdTypeOptions = [
+    'Birth Certificate',
+    'National ID',
+    'Nemis / School ID',
+    'Passport / Alien ID',
+  ];
+  final List<String> _dependantRelationshipOptions = [
+    'Child',
+    'Spouse',
+    'Parent',
+    'Sibling',
+    'Legal Ward',
+  ];
 
   // Personal controllers
   final _fullNameCtrl = TextEditingController();
@@ -123,6 +172,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _nokPhoneCtrl.dispose();
     _nokIdCtrl.dispose();
     _dependantsCountCtrl.dispose();
+    for (final d in _dependants) {
+      d.dispose();
+    }
     super.dispose();
   }
 
@@ -178,6 +230,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         if (hd == 'Yes' || hd == 'true') {
           _hasDependants = 'Yes';
           _dependantsCountCtrl.text = (fd['number_of_dependants'] ?? '1').toString();
+
+          final rawList = fd['dependants_list'] ?? fd['dependants_details'];
+          if (rawList is List && rawList.isNotEmpty) {
+            _dependants = rawList.map((item) {
+              final m = (item as Map).cast<String, dynamic>();
+              final type = m['id_type']?.toString();
+              final rel = m['relationship']?.toString();
+              return DependantItem(
+                name: (m['name'] ?? '').toString(),
+                age: (m['age'] ?? '').toString(),
+                idNumber: (m['id_number'] ?? m['identification'] ?? '').toString(),
+                idType: _dependantIdTypeOptions.contains(type) ? type! : 'Birth Certificate',
+                relationship: _dependantRelationshipOptions.contains(rel) ? rel! : 'Child',
+              );
+            }).toList();
+          } else {
+            final count = int.tryParse(_dependantsCountCtrl.text) ?? 1;
+            _dependants = List.generate(count > 0 ? count : 1, (_) => DependantItem());
+          }
         }
       }
     } catch (e) {
@@ -258,10 +329,40 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
+      if (_hasDependants == 'Yes') {
+        if (_dependants.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please add at least one registered dependant or select "No".')),
+          );
+          return;
+        }
+        for (int i = 0; i < _dependants.length; i++) {
+          final dep = _dependants[i];
+          if (dep.nameCtrl.text.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please enter Full Legal Name for Dependant #${i + 1}')),
+            );
+            return;
+          }
+          if (dep.ageCtrl.text.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please enter Age / Year of Birth for Dependant #${i + 1}')),
+            );
+            return;
+          }
+          if (dep.idCtrl.text.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please enter Verified ID / Birth Cert No. for Dependant #${i + 1}')),
+            );
+            return;
+          }
+        }
+      }
+
       final idVal = _idNumberCtrl.text.trim();
       final nokNameVal = _nokNameCtrl.text.trim();
       final nokPhoneVal = _nokPhoneCtrl.text.trim();
-      final depCountVal = _hasDependants == 'Yes' ? _dependantsCountCtrl.text.trim() : '0';
+      final depCountVal = _hasDependants == 'Yes' ? _dependants.length.toString() : '0';
       final countyVal = _countyCtrl.text.trim();
       final subCountyVal = _subCountyCtrl.text.trim();
       final wardVal = _wardCtrl.text.trim();
@@ -721,23 +822,185 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                               ],
                               selected: {_hasDependants},
                               onSelectionChanged: (set) {
-                                setState(() => _hasDependants = set.first);
+                                setState(() {
+                                  _hasDependants = set.first;
+                                  if (_hasDependants == 'Yes' && _dependants.isEmpty) {
+                                    _dependants.add(DependantItem());
+                                  }
+                                });
                               },
                             ),
                           ],
                         ),
                         if (_hasDependants == 'Yes') ...[
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _dependantsCountCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: _inputDecor('Number of Dependants', Icons.child_care_rounded, hint: 'e.g. 2'),
-                            validator: (v) {
-                              if (_hasDependants == 'Yes' && (v == null || v.trim().isEmpty)) {
-                                return 'Please specify number of dependants';
-                              }
-                              return null;
-                            },
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade100),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: Colors.blue.shade700, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Constitution Clause 4: Only declared dependants with verified legal identification qualify for welfare benefits.',
+                                    style: GoogleFonts.outfit(fontSize: 11.5, color: Colors.blue.shade900, height: 1.3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ..._dependants.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final dep = entry.value;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'Dependant #${idx + 1}',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (_dependants.length > 1)
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+                                          tooltip: 'Remove Dependant',
+                                          onPressed: () {
+                                            setState(() {
+                                              dep.dispose();
+                                              _dependants.removeAt(idx);
+                                            });
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextFormField(
+                                    controller: dep.nameCtrl,
+                                    decoration: _inputDecor('Dependant Full Legal Name', Icons.person_rounded, hint: 'e.g. Brian Makori'),
+                                    validator: (v) {
+                                      if (_hasDependants == 'Yes' && (v == null || v.trim().isEmpty)) {
+                                        return 'Dependant name is required';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: dep.ageCtrl,
+                                          decoration: _inputDecor('Age / Birth Year', Icons.cake_rounded, hint: 'e.g. 8 or 2018'),
+                                          validator: (v) {
+                                            if (_hasDependants == 'Yes' && (v == null || v.trim().isEmpty)) {
+                                              return 'Age required';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          value: _dependantRelationshipOptions.contains(dep.relationship) ? dep.relationship : 'Child',
+                                          decoration: _inputDecor('Relationship', Icons.group_outlined),
+                                          items: _dependantRelationshipOptions
+                                              .map((r) => DropdownMenuItem(value: r, child: Text(r, style: GoogleFonts.outfit(fontSize: 13))))
+                                              .toList(),
+                                          onChanged: (v) {
+                                            if (v != null) setState(() => dep.relationship = v);
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          value: _dependantIdTypeOptions.contains(dep.idType) ? dep.idType : 'Birth Certificate',
+                                          decoration: _inputDecor('ID Type', Icons.folder_shared_outlined),
+                                          items: _dependantIdTypeOptions
+                                              .map((t) => DropdownMenuItem(value: t, child: Text(t, style: GoogleFonts.outfit(fontSize: 12))))
+                                              .toList(),
+                                          onChanged: (v) {
+                                            if (v != null) setState(() => dep.idType = v);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: dep.idCtrl,
+                                          decoration: _inputDecor('Verified ID / Cert No.', Icons.verified_rounded, hint: 'e.g. BC/2018/12345'),
+                                          validator: (v) {
+                                            if (_hasDependants == 'Yes' && (v == null || v.trim().isEmpty)) {
+                                              return 'ID/Cert No. required';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _dependants.add(DependantItem());
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
+                              label: Text(
+                                '+ Add Another Dependant',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14),
+                              ),
+                            ),
                           ),
                         ],
                       ],

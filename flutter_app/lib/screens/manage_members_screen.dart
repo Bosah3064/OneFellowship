@@ -294,6 +294,44 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                 _buildKycRow('Relationship', nokRel.toString()),
                 _buildKycRow('Phone Number', nokPhone.toString()),
                 _buildKycRow('$nokIdType No.', nokId.toString()),
+                if ((fd['dependants_list'] ?? fd['dependants_details']) is List &&
+                    ((fd['dependants_list'] ?? fd['dependants_details']) as List).isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Registered Dependants (${((fd['dependants_list'] ?? fd['dependants_details']) as List).length})',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryDark),
+                  ),
+                  const SizedBox(height: 8),
+                  ...((fd['dependants_list'] ?? fd['dependants_details']) as List).asMap().entries.map((e) {
+                    final m = (e.value as Map).cast<String, dynamic>();
+                    final dName = m['name'] ?? 'Unknown';
+                    final dAge = m['age'] ?? 'N/A';
+                    final dId = m['id_number'] ?? m['identification'] ?? 'N/A';
+                    final dType = m['id_type'] ?? 'ID / Cert';
+                    final dRel = m['relationship'] ?? 'Dependant';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${e.key + 1}. $dName ($dRel)',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                          const SizedBox(height: 3),
+                          Text('Age: $dAge • $dType: $dId',
+                              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
                 const SizedBox(height: 14),
                 const Divider(),
                 const SizedBox(height: 10),

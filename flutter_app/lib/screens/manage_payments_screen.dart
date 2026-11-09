@@ -1015,20 +1015,20 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
               const Spacer(),
               if (isPending)
                 SizedBox(
-                  height: 30,
+                  height: 34,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10)),
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14)),
                     onPressed: () => _markAsPaid(payment),
                     icon:
-                        const Icon(Icons.check, color: Colors.white, size: 14),
-                    label: Text('Paid',
+                        const Icon(Icons.check_circle_outline, color: Colors.white, size: 16),
+                    label: Text('Mark Paid',
                         style: GoogleFonts.outfit(
                             color: Colors.white,
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600)),
                   ),
                 ),

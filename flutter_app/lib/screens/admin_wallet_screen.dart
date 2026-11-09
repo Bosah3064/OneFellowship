@@ -89,21 +89,78 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
     }
   }
 
-  void _showAddExpenseDialog() {
+  void _showAddExpenseDialog() async {
     final amountCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    final now = DateTime.now();
+    final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final dateCtrl = TextEditingController(text: dateStr);
+    
     String type = 'expense'; // 'expense', 'payout', 'other'
+    String authorityRole = 'Treasurer';
+    String authorityName = SupabaseService.currentUser?.displayName ?? 'Admin Official';
+
+    try {
+      final m = await SupabaseService.fetchCurrentMember();
+      if (m != null) {
+        authorityName = m['full_name']?.toString() ?? authorityName;
+        final r = (m['role'] ?? '').toString().toLowerCase();
+        if (r == 'chairperson') authorityRole = 'Chairperson';
+        else if (r == 'treasury' || r == 'treasurer') authorityRole = 'Treasurer';
+        else if (r == 'secretary') authorityRole = 'Secretary';
+      }
+    } catch (_) {}
+
+    final authorityNameCtrl = TextEditingController(text: authorityName);
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Record Transaction', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Text('Record Expense / Trail', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Governance & Security Banner
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.shield_outlined, color: Colors.blue.shade800, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Leadership Audit Trail: This entry will be permanently logged with your authority title, date, and identity.',
+                          style: GoogleFonts.outfit(fontSize: 11, color: Colors.blue.shade900, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
                   value: type,
                   decoration: InputDecoration(
@@ -130,6 +187,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Amount (KES)',
+                    hintText: 'e.g. 5000',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
@@ -138,8 +196,49 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   controller: descCtrl,
                   maxLines: 2,
                   decoration: InputDecoration(
-                    labelText: 'Description / Notes',
-                    hintText: 'e.g. Registration fees used for hosting',
+                    labelText: 'Description / Purpose / Notes',
+                    hintText: 'e.g. Bereavement support disburse / hall hire',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: authorityRole,
+                        decoration: InputDecoration(
+                          labelText: 'Authority Role',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Treasurer', child: Text('Treasurer')),
+                          DropdownMenuItem(value: 'Chairperson', child: Text('Chairperson')),
+                          DropdownMenuItem(value: 'Secretary', child: Text('Secretary')),
+                          DropdownMenuItem(value: 'Admin Official', child: Text('Admin Official')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setD(() => authorityRole = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: dateCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Date (YYYY-MM-DD)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: authorityNameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Official Name (Logged Leader)',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
@@ -152,27 +251,40 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
               onPressed: () async {
                 final amt = double.tryParse(amountCtrl.text);
                 if (amt == null || amt <= 0 || descCtrl.text.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Invalid input')));
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter valid amount and description')));
                   return;
                 }
                 Navigator.pop(ctx);
                 setState(() => _isLoading = true);
                 try {
                   final userId = SupabaseService.currentUser?.id;
+                  final recordedBy = authorityNameCtrl.text.trim().isNotEmpty
+                      ? authorityNameCtrl.text.trim()
+                      : authorityName;
+                  
                   await SupabaseService.adminAddExpense({
                     'amount': amt,
-                    'description': descCtrl.text,
+                    'description': descCtrl.text.trim(),
                     'type': type,
-                    'status': 'pending', // Requires approval
+                    'status': 'pending', // Requires approval under Clause 5 & 7
                     'added_by': userId,
+                    'recorded_by_name': recordedBy,
+                    'recorded_by_role': authorityRole,
+                    'expense_date': dateCtrl.text.trim().isNotEmpty ? dateCtrl.text.trim() : dateStr,
                   });
                   await _loadWalletData();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Transaction submitted for approval')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✅ Transaction recorded by $recordedBy ($authorityRole) and logged to Audit Trail!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
                   }
                 } catch (e) {
                   if (mounted) {
@@ -181,7 +293,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   }
                 }
               },
-              child: const Text('Submit', style: TextStyle(color: Colors.white)),
+              child: const Text('Record & Trail', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -527,7 +639,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                               icon: Icons.account_balance_wallet,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _buildSummaryCard(
                               title: 'Registration Fees',
@@ -536,7 +648,11 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                               icon: Icons.how_to_reg,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
                           Expanded(
                             child: _buildSummaryCard(
                               title: 'Monthly Savings',
@@ -545,11 +661,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                               icon: Icons.savings,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _buildSummaryCard(
                               title: 'Member Payouts',
@@ -558,16 +670,14 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                               icon: Icons.card_giftcard_rounded,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildSummaryCard(
-                              title: 'Approved Expenses',
-                              amount: _totalApprovedExpenses,
-                              color: AppColors.error,
-                              icon: Icons.receipt_long_rounded,
-                            ),
-                          ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildSummaryCard(
+                        title: 'Approved Expenses Disbursed',
+                        amount: _totalApprovedExpenses,
+                        color: AppColors.error,
+                        icon: Icons.receipt_long_rounded,
                       ),
                     ],
                   ),
@@ -639,8 +749,18 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                             children: [
                                               Text(expense['description'] ?? 'No description', 
                                                 style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
-                                              Text('By: ${expense['members']?['full_name'] ?? 'Unknown'} • $formattedDate', 
-                                                style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Recorded by: ${expense['recorded_by_name'] ?? expense['members']?['full_name'] ?? 'Authority'} (${expense['recorded_by_role'] ?? 'Leadership'}) • $formattedDate', 
+                                                style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w500),
+                                              ),
+                                              if (expense['approved_by_name'] != null) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Authorized by: ${expense['approved_by_name']} (${expense['authorized_role'] ?? 'Executive'})',
+                                                  style: GoogleFonts.outfit(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -663,22 +783,33 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                     if (status == 'pending') ...[
                                       const Divider(height: 24),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          TextButton.icon(
-                                            onPressed: () => _updateExpenseStatus(expense['id'], 'rejected'),
-                                            icon: const Icon(Icons.close, color: AppColors.error, size: 16),
-                                            label: const Text('Reject', style: TextStyle(color: AppColors.error)),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          ElevatedButton.icon(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.success,
-                                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: AppColors.error,
+                                                side: BorderSide(color: AppColors.error.withOpacity(0.5)),
+                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              ),
+                                              onPressed: () => _updateExpenseStatus(expense['id'], 'rejected'),
+                                              icon: const Icon(Icons.close_rounded, size: 18),
+                                              label: Text('Reject', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
                                             ),
-                                            onPressed: () => _showApprovalWithFraudWarningDialog(expense),
-                                            icon: const Icon(Icons.shield_outlined, color: Colors.white, size: 16),
-                                            label: const Text('Approve', style: TextStyle(color: Colors.white)),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: AppColors.success,
+                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                elevation: 0,
+                                              ),
+                                              onPressed: () => _showApprovalWithFraudWarningDialog(expense),
+                                              icon: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 18),
+                                              label: Text('Authorize', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
+                                            ),
                                           ),
                                         ],
                                       ),
