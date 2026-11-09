@@ -404,10 +404,17 @@ class SupabaseService {
     required String title,
     required String message,
     String type = 'info',
+    String? senderName,
+    String? senderId,
+    String? senderRole,
   }) async {
     if (memberIds.isEmpty) return;
     final batch = _firestore.batch();
     final now = DateTime.now().toIso8601String();
+    final sName = senderName ?? currentUser?.displayName ?? 'Admin';
+    final sId = senderId ?? currentUser?.id ?? 'admin';
+    final sRole = senderRole ?? 'Administrator';
+
     for (final id in memberIds) {
       final docRef = _firestore.collection('notifications').doc();
       batch.set(docRef, {
@@ -417,10 +424,29 @@ class SupabaseService {
         'message': message,
         'type': type,
         'is_read': false,
+        'sender_id': sId,
+        'sender_name': sName,
+        'sender_role': sRole,
         'created_at': now,
       });
     }
     await batch.commit();
+
+    // Log to Audit Trail
+    await logAuditEvent(
+      action: 'NOTIFICATION_SENT',
+      title: 'Dispatched Notification: "$title"',
+      description: 'Sent to ${memberIds.length} member(s): "$message"',
+      category: 'notifications',
+      performedBy: sName,
+      performedById: sId,
+      performedByRole: sRole,
+      metadata: {
+        'recipient_count': memberIds.length,
+        'type': type,
+        'notification_title': title,
+      },
+    );
   }
 
   // ─── Admin Wallet (Expenses) ──────────────────────────────────
@@ -440,10 +466,83 @@ class SupabaseService {
       if (!data.containsKey('created_at')) 'created_at': DateTime.now().toIso8601String(),
     };
     await docRef.set(payload);
+
+    await logAuditEvent(
+      action: 'EXPENSE_RECORDED',
+      title: 'Expense Recorded: KES ${data['amount']}',
+      description: '${data['description'] ?? 'No notes'} (${data['type'] ?? 'expense'})',
+      category: 'expenses',
+      performedBy: currentUser?.displayName ?? 'Admin',
+      performedById: currentUser?.id,
+      metadata: {'amount': data['amount'], 'type': data['type']},
+    );
   }
 
-  static Future<void> adminUpdateExpenseStatus(String id, String status) async {
-    await _firestore.collection('organization_expenses').doc(id).update({'status': status});
+  static Future<void> adminUpdateExpenseStatus(String id, String status, {Map<String, dynamic>? auditTrail}) async {
+    final updateData = <String, dynamic>{
+      'status': status,
+      'status_updated_at': DateTime.now().toIso8601String(),
+    };
+    if (auditTrail != null) {
+      updateData.addAll(auditTrail);
+    }
+    await _firestore.collection('organization_expenses').doc(id).update(updateData);
+
+    await logAuditEvent(
+      action: status == 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED',
+      title: 'Expense $status: ID $id',
+      description: 'Status changed to $status by ${auditTrail?['approver_role'] ?? 'Official'}',
+      category: 'expenses',
+      performedBy: auditTrail?['approved_by_name'] ?? currentUser?.displayName ?? 'Official',
+      performedById: auditTrail?['approved_by_id'] ?? currentUser?.id,
+      performedByRole: auditTrail?['approver_role']?.toString(),
+      metadata: auditTrail ?? {},
+    );
+  }
+
+  // ─── Security & Audit Logs ────────────────────────────────────
+
+  static Future<void> logAuditEvent({
+    required String action,
+    required String title,
+    required String description,
+    required String category, // 'notifications', 'expenses', 'payouts', 'members', 'security'
+    String? performedBy,
+    String? performedById,
+    String? performedByRole,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final u = currentUser;
+      final docRef = _firestore.collection('audit_logs').doc();
+      final now = DateTime.now().toIso8601String();
+      await docRef.set({
+        'id': docRef.id,
+        'action': action,
+        'title': title,
+        'description': description,
+        'category': category,
+        'performed_by': performedBy ?? u?.displayName ?? 'Admin',
+        'performed_by_id': performedById ?? u?.id ?? 'admin',
+        'performed_by_role': performedByRole ?? 'Official',
+        'metadata': metadata ?? {},
+        'created_at': now,
+      });
+    } catch (e) {
+      debugPrint('logAuditEvent error: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchAuditLogs() async {
+    try {
+      final snap = await _firestore.collection('audit_logs').get();
+      final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+      return list;
+    } catch (e) {
+      debugPrint('fetchAuditLogs error: $e');
+      return [];
+    }
   }
 
   // ─── Admin Password Reset ─────────────────────────────────────

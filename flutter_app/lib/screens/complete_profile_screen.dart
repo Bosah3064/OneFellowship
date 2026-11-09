@@ -30,10 +30,27 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _dobCtrl = TextEditingController();
   final _occupationCtrl = TextEditingController();
 
+  // Residential & location controllers (County, Sub-County, Ward, Village)
+  final _countyCtrl = TextEditingController();
+  final _subCountyCtrl = TextEditingController();
+  final _wardCtrl = TextEditingController();
+  final _villageCtrl = TextEditingController();
+
   // Next of kin controllers
   final _nokNameCtrl = TextEditingController();
   final _nokPhoneCtrl = TextEditingController();
   final _nokIdCtrl = TextEditingController();
+  String _nokIdType = 'National ID Card';
+
+  // Welfare rules agreement
+  bool _agreedToRules = false;
+
+  final List<String> _nokIdTypeOptions = [
+    'National ID Card',
+    'Birth Certificate',
+    'Passport',
+    'Alien / Refugee ID',
+  ];
 
   // Dropdown selections
   String? _gender;
@@ -98,6 +115,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _idNumberCtrl.dispose();
     _dobCtrl.dispose();
     _occupationCtrl.dispose();
+    _countyCtrl.dispose();
+    _subCountyCtrl.dispose();
+    _wardCtrl.dispose();
+    _villageCtrl.dispose();
     _nokNameCtrl.dispose();
     _nokPhoneCtrl.dispose();
     _nokIdCtrl.dispose();
@@ -118,6 +139,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         _dobCtrl.text = (fd['date_of_birth'] ?? fd['dob'] ?? '').toString();
         _occupationCtrl.text = (fd['occupation'] ?? '').toString();
 
+        _countyCtrl.text = (fd['county'] ?? '').toString();
+        _subCountyCtrl.text = (fd['sub_county'] ?? fd['subcounty'] ?? '').toString();
+        _wardCtrl.text = (fd['ward'] ?? fd['word'] ?? '').toString();
+        _villageCtrl.text = (fd['village'] ?? fd['estate'] ?? fd['residence'] ?? '').toString();
+
         final g = fd['gender']?.toString();
         if (g != null && _genderOptions.contains(g)) _gender = g;
 
@@ -130,6 +156,20 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         _nokNameCtrl.text = (fd['next_of_kin_full_name'] ?? fd['nok_name'] ?? '').toString();
         _nokPhoneCtrl.text = (fd['next_of_kin_phone_number'] ?? fd['nok_phone'] ?? '').toString();
         _nokIdCtrl.text = (fd['next_of_kin_national_id_number'] ?? fd['nok_id'] ?? '').toString();
+
+        final nokType = (fd['next_of_kin_id_type'] ?? fd['nok_id_type'])?.toString();
+        if (nokType != null && _nokIdTypeOptions.contains(nokType)) {
+          _nokIdType = nokType;
+        }
+
+        final cloudAgreed = (fd['agreed_to_welfare_rules'] == true) || (member['agreed_to_welfare_rules'] == true);
+        if (cloudAgreed) {
+          _agreedToRules = true;
+        } else {
+          final prefs = await SharedPreferences.getInstance();
+          final localAgreed = prefs.getBool('welfare_rules_agreed_${member['id'] ?? ''}') ?? false;
+          if (localAgreed) _agreedToRules = true;
+        }
 
         final r = fd['relationship_to_you']?.toString();
         if (r != null && _relationshipOptions.contains(r)) _relationship = r;
@@ -183,6 +223,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _submitProfile() async {
+    if (!_agreedToRules) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('⚠️ You must agree to abide by the Welfare Constitution & Rules to submit your registration.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -210,6 +262,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       final nokNameVal = _nokNameCtrl.text.trim();
       final nokPhoneVal = _nokPhoneCtrl.text.trim();
       final depCountVal = _hasDependants == 'Yes' ? _dependantsCountCtrl.text.trim() : '0';
+      final countyVal = _countyCtrl.text.trim();
+      final subCountyVal = _subCountyCtrl.text.trim();
+      final wardVal = _wardCtrl.text.trim();
+      final villageVal = _villageCtrl.text.trim();
 
       final formDetails = <String, dynamic>{
         'national_id_number': idVal,
@@ -221,6 +277,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         'branch': _branch ?? '',
         'occupation': _occupationCtrl.text.trim(),
         'profession': _occupationCtrl.text.trim(),
+        'county': countyVal,
+        'sub_county': subCountyVal,
+        'subcounty': subCountyVal,
+        'ward': wardVal,
+        'word': wardVal,
+        'village': villageVal,
+        'estate': villageVal,
+        'residence': villageVal,
         'next_of_kin_full_name': nokNameVal,
         'next_of_kin_name': nokNameVal,
         'nok_name': nokNameVal,
@@ -228,6 +292,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         'next_of_kin_phone': nokPhoneVal,
         'nok_phone': nokPhoneVal,
         'next_of_kin_national_id_number': _nokIdCtrl.text.trim(),
+        'next_of_kin_id': _nokIdCtrl.text.trim(),
+        'nok_id': _nokIdCtrl.text.trim(),
+        'next_of_kin_id_type': _nokIdType,
+        'nok_id_type': _nokIdType,
+        'agreed_to_welfare_rules': true,
+        'welfare_rules_agreed_at': DateTime.now().toIso8601String(),
+        'commitment_fee_amount': 1000,
+        'min_contribution_amount': 1000,
         'relationship_to_you': _relationship ?? '',
         'has_dependants': _hasDependants,
         'dependants': _hasDependants,
@@ -244,9 +316,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         formDetails: formDetails,
       );
 
-      // Lock profile completion in local storage permanently
+      // Lock profile completion & rules agreement in local storage permanently
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('profile_completed_${user.id}', true);
+      await prefs.setBool('welfare_rules_agreed_${user.id}', true);
+      await prefs.setString('welfare_rules_agreed_date_${user.id}', DateTime.now().toIso8601String());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -491,6 +565,61 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                           decoration: _inputDecor('Occupation / Profession', Icons.work_outline_rounded, hint: 'e.g. Business, Teacher, IT'),
                           validator: (v) => (v == null || v.trim().isEmpty) ? 'Occupation is required' : null,
                         ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Residential & Location Details',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _countyCtrl,
+                                decoration: _inputDecor('County', Icons.map_outlined, hint: 'e.g. Kisii / Nairobi'),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'County is required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _subCountyCtrl,
+                                decoration: _inputDecor('Sub-County', Icons.holiday_village_outlined, hint: 'e.g. Kitutu Central'),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Sub-County is required' : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _wardCtrl,
+                                decoration: _inputDecor('Ward', Icons.apartment_rounded, hint: 'e.g. Nyanchwa / Bogusero'),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Ward is required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _villageCtrl,
+                                decoration: _inputDecor('Village / Estate', Icons.home_work_outlined, hint: 'e.g. Gesonso / Milimani'),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Village / Estate is required' : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -533,12 +662,40 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: TextFormField(
-                                controller: _nokIdCtrl,
-                                decoration: _inputDecor('Next of Kin ID (Optional)', Icons.badge_rounded),
+                              child: DropdownButtonFormField<String>(
+                                value: _nokIdType,
+                                decoration: _inputDecor('ID Doc Type', Icons.folder_shared_rounded),
+                                items: _nokIdTypeOptions
+                                    .map((t) => DropdownMenuItem(value: t, child: Text(t, style: GoogleFonts.outfit(fontSize: 12.5))))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _nokIdType = v);
+                                },
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _nokIdCtrl,
+                          decoration: _inputDecor(
+                            'Verified Next of Kin ID / Birth Cert No.',
+                            Icons.verified_user_rounded,
+                            hint: 'e.g. 12345678 or BC/2021/45678',
+                          ),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Next of kin verified identification number is required';
+                            }
+                            if (v.trim().length < 4) {
+                              return 'Enter a valid identification number (min 4 characters)';
+                            }
+                            final myId = _idNumberCtrl.text.trim().toLowerCase();
+                            if (myId.isNotEmpty && v.trim().toLowerCase() == myId) {
+                              return 'Next of kin ID cannot be identical to member\'s own ID';
+                            }
+                            return null;
+                          },
                         ),
                       ],
                     ),
@@ -585,7 +742,104 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 20),
+
+                    // SECTION 4: Welfare Fund Constitution & Code of Conduct Agreement
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _agreedToRules ? AppColors.success : AppColors.primary,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_agreedToRules ? AppColors.success : AppColors.primary).withOpacity(0.08),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _agreedToRules ? Icons.verified_rounded : Icons.gavel_rounded,
+                                color: _agreedToRules ? AppColors.success : AppColors.primary,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Welfare Constitution & Policies',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: _agreedToRules,
+                                activeColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                onChanged: (val) {
+                                  setState(() => _agreedToRules = val ?? false);
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() => _agreedToRules = !_agreedToRules);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Text(
+                                      'I solemnly agree to abide by all the rules, constitution, commitment fee (KES 1,000), minimum contribution (KES 1,000), 7-day grace period, and disciplinary guidelines of OneFellowship.',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () {
+                                Navigator.pushNamed(context, '/terms-and-conditions');
+                              },
+                              icon: const Icon(Icons.open_in_new_rounded, size: 14, color: AppColors.primary),
+                              label: Text(
+                                'Read Full Constitution & Minutes',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
                     // SUBMIT BUTTON
                     Container(

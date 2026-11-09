@@ -18,6 +18,7 @@ import 'screens/reset_password_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/manage_notifications_screen.dart';
 import 'screens/admin_wallet_screen.dart';
+import 'screens/admin_audit_logs_screen.dart';
 import 'screens/terms_and_conditions_screen.dart';
 import 'screens/force_change_password_screen.dart';
 import 'services/biometric_service.dart';
@@ -161,6 +162,7 @@ class OneFellowshipApp extends StatelessWidget {
         ManagePaymentsScreen.route: (_) => const ManagePaymentsScreen(),
         ManageNotificationsScreen.route: (_) => const ManageNotificationsScreen(),
         AdminWalletScreen.route: (_) => const AdminWalletScreen(),
+        AdminAuditLogsScreen.route: (_) => const AdminAuditLogsScreen(),
         SettingsScreen.route: (_) => const SettingsScreen(),
         NotificationsScreen.route: (_) => const NotificationsScreen(),
         TermsAndConditionsScreen.route: (_) => const TermsAndConditionsScreen(),

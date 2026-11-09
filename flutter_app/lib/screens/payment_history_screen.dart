@@ -233,8 +233,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                       ),
                     ),
 
-                  // Bottom padding
-                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  // Bottom padding with safe area
+                  SliverToBoxAdapter(child: SizedBox(height: MediaQuery.of(context).padding.bottom + 40)),
                 ],
               ),
             ),

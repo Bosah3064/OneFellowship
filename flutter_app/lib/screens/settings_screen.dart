@@ -503,6 +503,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _buildActionRow(Icons.account_balance_wallet_rounded, 'Organization Wallet', () {
                               Navigator.pushNamed(context, '/admin-wallet');
                             }),
+                            _buildDivider(),
+                            _buildActionRow(Icons.security_rounded, 'Security & Audit Logs', () {
+                              Navigator.pushNamed(context, '/admin-audit-logs');
+                            }),
                           ],
                         ),
                       ),
@@ -534,7 +538,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: const Color(0xFFF3F4F6)),
                       ),
-                      child: _buildActionRow(Icons.policy_rounded, 'Terms & Policies', () {
+                      child: _buildActionRow(Icons.menu_book_rounded, 'Welfare Constitution & Policies', () {
                         Navigator.pushNamed(context, '/terms-and-conditions');
                       }),
                     ),

@@ -21,7 +21,7 @@ class _BulkPaymentsDialogState extends State<BulkPaymentsDialog> {
   bool _isLoading = false;
   final Set<String> _selectedMemberIds = {};
   
-  final _amountController = TextEditingController(text: '500');
+  final _amountController = TextEditingController(text: '1000');
   String _month = '${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][DateTime.now().month-1]} ${DateTime.now().year}';
   String _type = 'Monthly Contribution';
   String _status = 'paid';

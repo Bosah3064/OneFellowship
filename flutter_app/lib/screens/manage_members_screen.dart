@@ -143,7 +143,26 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                     ],
                     onChanged: (val) => setDialogState(() => status = val!),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  // View KYC & Residential Info Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showMemberKycSheet(member);
+                      },
+                      icon: const Icon(Icons.assignment_ind_outlined, size: 18),
+                      label: Text('View KYC & Residence Details', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   // Reset Password Button
                   SizedBox(
                     width: double.infinity,
@@ -189,6 +208,136 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
           },
         );
       },
+    );
+  }
+
+  void _showMemberKycSheet(Map<String, dynamic> member) {
+    final fd = (member['form_details'] as Map<String, dynamic>?) ?? {};
+    final idNumber = fd['national_id_number'] ?? fd['id_number'] ?? 'Not provided';
+    final branch = fd['branch'] ?? 'Not set';
+    final occupation = fd['occupation'] ?? fd['profession'] ?? 'Not set';
+    final county = fd['county'] ?? 'Not set';
+    final subCounty = fd['sub_county'] ?? fd['subcounty'] ?? 'Not set';
+    final ward = fd['ward'] ?? fd['word'] ?? 'Not set';
+    final village = fd['village'] ?? fd['estate'] ?? fd['residence'] ?? 'Not set';
+    final nokName = fd['next_of_kin_full_name'] ?? fd['nok_name'] ?? 'Not provided';
+    final nokPhone = fd['next_of_kin_phone_number'] ?? fd['nok_phone'] ?? 'Not provided';
+    final nokId = fd['next_of_kin_national_id_number'] ?? fd['nok_id'] ?? 'Not provided';
+    final nokIdType = fd['next_of_kin_id_type'] ?? fd['nok_id_type'] ?? 'ID Document';
+    final nokRel = fd['relationship_to_you'] ?? 'Not set';
+    final agreedRules = (fd['agreed_to_welfare_rules'] == true) || (member['agreed_to_welfare_rules'] == true);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                      child: Text(
+                        (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
+                        style: GoogleFonts.outfit(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Divider(),
+                const SizedBox(height: 10),
+                Text('Location & Administrative Origin', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryDark)),
+                const SizedBox(height: 8),
+                _buildKycRow('County', county.toString()),
+                _buildKycRow('Sub-County', subCounty.toString()),
+                _buildKycRow('Ward', ward.toString()),
+                _buildKycRow('Village / Estate', village.toString()),
+                _buildKycRow('Branch', branch.toString()),
+                _buildKycRow('Occupation', occupation.toString()),
+                _buildKycRow('National ID', idNumber.toString()),
+                const SizedBox(height: 14),
+                const Divider(),
+                const SizedBox(height: 10),
+                Text('Next of Kin (Verified Beneficiary)', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryDark)),
+                const SizedBox(height: 8),
+                _buildKycRow('Full Name', nokName.toString()),
+                _buildKycRow('Relationship', nokRel.toString()),
+                _buildKycRow('Phone Number', nokPhone.toString()),
+                _buildKycRow('$nokIdType No.', nokId.toString()),
+                const SizedBox(height: 14),
+                const Divider(),
+                const SizedBox(height: 10),
+                Text('Welfare Compliance & Ratification', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryDark)),
+                const SizedBox(height: 8),
+                _buildKycRow('Rules Ratified', agreedRules ? '✅ Yes (Agreed & Bound)' : '❌ Not Ratified Yet'),
+                _buildKycRow('Commitment Fee', 'KES 1,000 (Required)'),
+                _buildKycRow('Min Contribution', 'KES 1,000 per case'),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text('Close Profile', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildKycRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(label, style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+          ),
+          Expanded(
+            child: Text(value, style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -400,7 +549,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : RefreshIndicator(
+          : SafeArea(
+              bottom: true,
+              child: RefreshIndicator(
               onRefresh: _loadData,
               child: Column(
                 children: [
@@ -466,7 +617,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                     child: _filtered.isEmpty
                         ? Center(child: Text('No members found', style: GoogleFonts.outfit(color: AppColors.textMuted)))
                         : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                            padding: EdgeInsets.fromLTRB(16, 4, 16, 28 + MediaQuery.of(context).padding.bottom),
                             itemCount: _filtered.length,
                             itemBuilder: (context, index) {
                               final member = _filtered[index];
@@ -529,6 +680,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 

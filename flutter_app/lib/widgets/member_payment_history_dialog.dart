@@ -56,7 +56,7 @@ class _MemberPaymentHistoryDialogState extends State<MemberPaymentHistoryDialog>
   Future<void> _updateOrAddPayment(String monthCode, Map<String, dynamic>? existingPayment) async {
     final fullMonthString = '$monthCode $_selectedYear';
     
-    final amountController = TextEditingController(text: existingPayment?['amount']?.toString() ?? '500');
+    final amountController = TextEditingController(text: existingPayment?['amount']?.toString() ?? '1000');
     String status = existingPayment?['status']?.toString().toLowerCase() ?? 'paid';
     
     final confirm = await showDialog<bool>(

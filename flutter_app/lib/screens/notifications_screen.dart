@@ -342,6 +342,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
+                                      if (n['sender_name'] != null && n['sender_name'].toString().isNotEmpty) ...[
+                                        const SizedBox(width: 12),
+                                        Icon(Icons.verified_user_rounded, size: 12, color: AppColors.primary.withOpacity(0.8)),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            'By: ${n['sender_name']}${n['sender_role'] != null ? ' (${n['sender_role']})' : ''}',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              color: AppColors.primaryDark,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],
@@ -356,6 +373,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 childCount: _notifications.length,
               ),
             ),
+          SliverToBoxAdapter(
+            child: SizedBox(height: MediaQuery.of(context).padding.bottom + 36),
+          ),
         ],
       ),
     );

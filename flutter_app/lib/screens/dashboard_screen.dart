@@ -20,6 +20,7 @@ import 'payment_history_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import 'complete_profile_screen.dart';
+import 'terms_and_conditions_screen.dart';
 
 bool _hasPlayedGreeting = false;
 
@@ -885,6 +886,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.receipt_long_rounded, 'Payment\nHistory', AppColors.success, () {
                                 Navigator.pushNamed(context, PaymentHistoryScreen.route);
+                              }),
+                              const SizedBox(width: 12),
+                              _buildQuickAction(Icons.menu_book_rounded, 'Welfare\nCharter', const Color(0xFF7C3AED), () {
+                                Navigator.pushNamed(context, TermsAndConditionsScreen.route);
                               }),
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.download_rounded, 'Save\nCard', AppColors.skyBlue, _showDownloadOptions),

@@ -265,7 +265,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 12),
                       _buildPill(Icons.shield_outlined, 'Real-time Password Strength Check'),
                       const SizedBox(height: 12),
-                      _buildPill(Icons.payments_rounded, 'Monthly Savings Min. 500 KES'),
+                      _buildPill(Icons.payments_rounded, 'Commitment & Min. Contribution: 1,000 KES'),
                     ],
                   ),
                 ),
@@ -628,7 +628,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600),
               children: const [
                 TextSpan(
-                  text: 'Terms & Policies',
+                  text: 'Welfare Constitution & Policies',
                   style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
                 ),
               ],

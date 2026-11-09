@@ -43,7 +43,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
   // ── Tab 3 state ──
   final Set<String> _bulkSelectedIds = {};
   String _bulkSearch = '';
-  final _bulkAmountCtrl = TextEditingController(text: '500');
+  final _bulkAmountCtrl = TextEditingController(text: '1000');
   late String _bulkMonth;
   String _bulkType = 'Monthly Contribution';
   String _bulkStatus = 'paid';
@@ -307,6 +307,30 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12)),
                 prefixText: 'KES ',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Constitution Policy: Standard minimum contribution is KES 1,000.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -875,7 +899,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                         style:
                             GoogleFonts.outfit(color: AppColors.textMuted)))
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 24 + MediaQuery.of(context).padding.bottom),
                     itemCount: payments.length,
                     itemBuilder: (context, i) =>
                         _buildPaymentCard(payments[i]),
@@ -1081,7 +1105,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
           // Member list to pick from
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 24 + MediaQuery.of(context).padding.bottom),
               itemCount: filteredMembers.length,
               itemBuilder: (ctx, i) {
                 final m = filteredMembers[i];
@@ -1164,10 +1188,9 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
 
           // 12-month grid
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            child: GridView.builder(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 28 + MediaQuery.of(context).padding.bottom),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
@@ -1236,7 +1259,6 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                 },
               ),
             ),
-          ),
         ],
       ],
     );
@@ -1574,7 +1596,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         // Submit button
         Container(
           color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.of(context).padding.bottom),
           child: Column(
             children: [
               SizedBox(
@@ -1638,19 +1660,85 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
   }
 
   Future<void> _issueBulkPayout() async {
+    bool confirmWarning = false;
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Payout'),
-        content: Text('Are you sure you want to mark all savings for ${_bulkSelectedIds.length} members as paid out? This will reset their savings balances to zero.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm Payout', style: TextStyle(color: Colors.white)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.shield_outlined, color: AppColors.error, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Confirm Payout & Anti-Fraud Notice',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
           ),
-        ],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to mark all savings for ${_bulkSelectedIds.length} members as paid out? This will reset their savings balances to zero and log an official expense disbursement.',
+                style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textPrimary, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Text(
+                  '⚠️ WELFARE CONSTITUTION CLAUSE 5 & 7:\n'
+                  'Disbursements require triple authorization (Chairperson, Secretary, Treasurer). Misappropriation results in immediate suspension, independent audit investigation, and prosecution.',
+                  style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF7F1D1D), height: 1.35),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: confirmWarning,
+                    activeColor: AppColors.error,
+                    onChanged: (v) => setD(() => confirmWarning = v ?? false),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setD(() => confirmWarning = !confirmWarning),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'I confirm this bulk payout has official authorization from leadership.',
+                          style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel', style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: confirmWarning ? AppColors.primary : Colors.grey.shade400,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: confirmWarning ? () => Navigator.pop(ctx, true) : null,
+              child: Text('Confirm Payout', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -1696,6 +1784,18 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         }
       }
       
+      // Log audit trail
+      await SupabaseService.logAuditEvent(
+        action: 'BULK_PAYOUT_ISSUED',
+        title: 'Bulk Savings Payout Issued',
+        description: 'Issued payouts for $updatedCount savings records across ${_bulkSelectedIds.length} members in compliance with Clause 5 & 7.',
+        category: 'payouts',
+        performedBy: SupabaseService.currentUser?.displayName ?? 'Admin',
+        performedById: userId,
+        performedByRole: 'Administrator',
+        metadata: {'updated_records': updatedCount, 'member_count': _bulkSelectedIds.length},
+      );
+
       _bulkSelectedIds.clear();
       await _loadData();
       if (mounted) {
@@ -1743,6 +1843,18 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         });
         added++;
       }
+      // Log audit trail
+      await SupabaseService.logAuditEvent(
+        action: 'BULK_PAYMENTS_RECORDED',
+        title: 'Bulk Payments Recorded ($added)',
+        description: 'Recorded payments of KES $amount for $_bulkMonth ($_bulkType) across $added members.',
+        category: 'payments',
+        performedBy: SupabaseService.currentUser?.displayName ?? 'Admin',
+        performedById: SupabaseService.currentUser?.id,
+        performedByRole: 'Administrator',
+        metadata: {'amount': amount, 'month': _bulkMonth, 'type': _bulkType, 'added': added, 'skipped': skipped},
+      );
+
       _bulkSelectedIds.clear();
       await _loadData();
       if (mounted) {
@@ -1865,7 +1977,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                   child: Text('No members found',
                       style: GoogleFonts.outfit(color: AppColors.textMuted)))
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.of(context).padding.bottom),
                   itemCount: summaryData.length,
                   itemBuilder: (context, index) {
                     final data = summaryData[index];

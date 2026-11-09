@@ -189,10 +189,10 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
     );
   }
 
-  Future<void> _updateExpenseStatus(String id, String newStatus) async {
+  Future<void> _updateExpenseStatus(String id, String newStatus, {Map<String, dynamic>? auditTrail}) async {
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.adminUpdateExpenseStatus(id, newStatus);
+      await SupabaseService.adminUpdateExpenseStatus(id, newStatus, auditTrail: auditTrail);
       await _loadWalletData();
     } catch (e) {
       if (mounted) {
@@ -200,6 +200,287 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating status: $e')));
       }
     }
+  }
+
+  void _showApprovalWithFraudWarningDialog(Map<String, dynamic> expense) {
+    String selectedRole = 'Treasurer';
+    bool confirmLegit = false;
+    bool confirmFraudWarning = false;
+    final amt = num.tryParse(expense['amount']?.toString() ?? '0') ?? 0;
+    final desc = expense['description'] ?? 'No description';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          final canApprove = confirmLegit && confirmFraudWarning;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            contentPadding: const EdgeInsets.all(20),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.shield_rounded, color: AppColors.error, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Authorization & Anti-Fraud Notice',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Welfare Constitution Clause 5 & 7',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 10),
+
+                  // Transaction Summary Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Disbursement Request',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              'KES ${amt.toStringAsFixed(0)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          desc,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Mandatory Fraud Warning Banner
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFB91C1C), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'CONSTITUTIONAL POLICY MANDATE',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFFB91C1C),
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '• Triple Authorization (Clause 5): All withdrawals, disbursements, and payments must be authorized by the Chairperson, Secretary, and Treasurer. No single official may authorize withdrawals independently.\n'
+                          '• Misappropriation & Fraud (Clause 7): Any embezzlement or unauthorized payout results in immediate restriction from fund access, suspension from duties pending independent audit, and criminal legal prosecution.',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: const Color(0xFF7F1D1D),
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Approving Official Role
+                  Text(
+                    'Signing Official Role',
+                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      prefixIcon: const Icon(Icons.person_pin_circle_rounded, color: AppColors.primary, size: 20),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Treasurer', child: Text('Treasurer')),
+                      DropdownMenuItem(value: 'Chairperson', child: Text('Chairperson')),
+                      DropdownMenuItem(value: 'Secretary', child: Text('Secretary')),
+                      DropdownMenuItem(value: 'Welfare Committee Member', child: Text('Welfare Committee Member')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setD(() => selectedRole = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Checkbox 1: Legitimacy
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: confirmLegit,
+                        activeColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        onChanged: (val) => setD(() => confirmLegit = val ?? false),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setD(() => confirmLegit = !confirmLegit),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'I verify this expense is legitimate, supported by documentation, and complies with Welfare Fund principles.',
+                              style: GoogleFonts.outfit(fontSize: 11.5, color: AppColors.textPrimary, height: 1.3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Checkbox 2: Fraud warning acknowledge
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: confirmFraudWarning,
+                        activeColor: AppColors.error,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        onChanged: (val) => setD(() => confirmFraudWarning = val ?? false),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setD(() => confirmFraudWarning = !confirmFraudWarning),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'I understand fraudulent approvals carry immediate suspension, independent church audit, and legal prosecution.',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF991B1B),
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancel', style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canApprove ? AppColors.success : Colors.grey.shade400,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: canApprove
+                    ? () async {
+                        Navigator.pop(ctx);
+                        final user = SupabaseService.currentUser;
+                        await _updateExpenseStatus(
+                          expense['id'],
+                          'approved',
+                          auditTrail: {
+                            'approved_by_id': user?.id,
+                            'approved_by_name': user?.displayName ?? 'Official',
+                            'approver_role': selectedRole,
+                            'fraud_policy_acknowledged': true,
+                            'authorized_at': DateTime.now().toIso8601String(),
+                          },
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('✅ Approved by $selectedRole in compliance with Clause 5 & 7'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.verified_rounded, color: Colors.white, size: 16),
+                label: Text(
+                  'Authorize & Approve',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -218,7 +499,9 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : Column(
+          : SafeArea(
+              bottom: true,
+              child: Column(
               children: [
                 // Financial Summary Cards
                 Container(
@@ -316,7 +599,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   child: _expenses.isEmpty
                       ? Center(child: Text('No recorded transactions yet', style: GoogleFonts.outfit(color: AppColors.textMuted)))
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: EdgeInsets.fromLTRB(16, 8, 16, 28 + MediaQuery.of(context).padding.bottom),
                           itemCount: _expenses.length,
                           itemBuilder: (context, index) {
                             final expense = _expenses[index];
@@ -393,8 +676,8 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                               backgroundColor: AppColors.success,
                                               padding: const EdgeInsets.symmetric(horizontal: 16),
                                             ),
-                                            onPressed: () => _updateExpenseStatus(expense['id'], 'approved'),
-                                            icon: const Icon(Icons.check, color: Colors.white, size: 16),
+                                            onPressed: () => _showApprovalWithFraudWarningDialog(expense),
+                                            icon: const Icon(Icons.shield_outlined, color: Colors.white, size: 16),
                                             label: const Text('Approve', style: TextStyle(color: Colors.white)),
                                           ),
                                         ],
@@ -409,6 +692,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                 ),
               ],
             ),
+          ),
     );
   }
 

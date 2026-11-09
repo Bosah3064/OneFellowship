@@ -117,7 +117,7 @@ class WelcomeScreen extends StatelessWidget {
                       _buildFeatureTile(
                         icon: Icons.savings_rounded,
                         title: 'Monthly Structured Savings',
-                        subtitle: 'Save from KES 500/month with 100% financial transparency.',
+                        subtitle: 'Save from KES 1,000/month with 100% financial transparency.',
                       ),
                       const SizedBox(height: 14),
                       _buildFeatureTile(
@@ -231,7 +231,7 @@ class WelcomeScreen extends StatelessWidget {
                   _buildFeatureTile(
                     icon: Icons.savings_rounded,
                     title: 'Structured Monthly Savings',
-                    subtitle: 'Save from KES 500/month towards shared prosperity.',
+                    subtitle: 'Save from KES 1,000/month towards shared prosperity.',
                   ),
                   const SizedBox(height: 12),
                   _buildFeatureTile(
