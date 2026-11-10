@@ -604,6 +604,15 @@ class SupabaseService {
         'expense_date': payload['expense_date'],
       },
     );
+
+    // Auto-notify all 3 approving leaders (Chairperson, Treasurer, Admin) of pending disbursement
+    notifyExpenseApprovers(
+      expenseId: docRef.id,
+      description: data['description']?.toString() ?? 'Expense',
+      amount: num.tryParse(data['amount']?.toString() ?? '0')?.toDouble() ?? 0.0,
+      currentApprovalCount: 0,
+      reason: 'new_expense',
+    ).catchError((_) => 0);
   }
 
   static Future<void> adminUpdateExpenseStatus(String id, String status, {Map<String, dynamic>? auditTrail}) async {
@@ -804,5 +813,228 @@ class SupabaseService {
     await _firestore.collection('members').doc(userId).set({
       'requires_password_reset': true,
     }, SetOptions(merge: true));
+  }
+
+  // ─── Feedback & Concerns ───────────────────────────────────────
+
+  /// Submit feedback/concern from a member.
+  static Future<void> submitFeedback({
+    required String category,
+    required String subject,
+    required String message,
+  }) async {
+    final u = currentUser;
+    final member = await fetchCurrentMember();
+    final now = DateTime.now().toIso8601String();
+    final docRef = _firestore.collection('feedback').doc();
+
+    await docRef.set({
+      'id': docRef.id,
+      'member_id': u?.id ?? '',
+      'member_name': member?['full_name'] ?? u?.displayName ?? 'Anonymous',
+      'member_email': member?['email'] ?? u?.email ?? '',
+      'member_phone': member?['phone'] ?? '',
+      'category': category,
+      'subject': subject,
+      'message': message,
+      'status': 'open', // open, in_review, resolved, closed
+      'admin_response': null,
+      'responded_by': null,
+      'responded_at': null,
+      'created_at': now,
+      'updated_at': now,
+    });
+
+    await logAuditEvent(
+      action: 'FEEDBACK_SUBMITTED',
+      title: 'New Feedback: $subject',
+      description: '${member?['full_name'] ?? 'Member'} submitted a $category: $subject',
+      category: 'feedback',
+      performedBy: member?['full_name']?.toString() ?? 'Member',
+      performedById: u?.id,
+    );
+  }
+
+  /// Fetch all feedback (admin view).
+  static Future<List<Map<String, dynamic>>> fetchAllFeedback() async {
+    final snap = await _firestore.collection('feedback').get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+    return list;
+  }
+
+  /// Fetch feedback submitted by the current user.
+  static Future<List<Map<String, dynamic>>> fetchMyFeedback() async {
+    final u = currentUser;
+    if (u == null) return [];
+    final snap = await _firestore.collection('feedback')
+        .where('member_id', isEqualTo: u.id)
+        .get();
+    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+    return list;
+  }
+
+  /// Admin responds to feedback.
+  static Future<void> respondToFeedback({
+    required String feedbackId,
+    required String response,
+    required String newStatus,
+  }) async {
+    final u = currentUser;
+    final member = await fetchCurrentMember();
+    final now = DateTime.now().toIso8601String();
+
+    await _firestore.collection('feedback').doc(feedbackId).update({
+      'admin_response': response,
+      'responded_by': member?['full_name'] ?? u?.displayName ?? 'Admin',
+      'responded_by_id': u?.id,
+      'responded_by_role': member?['role'] ?? 'admin',
+      'responded_at': now,
+      'status': newStatus,
+      'updated_at': now,
+    });
+
+    await logAuditEvent(
+      action: 'FEEDBACK_RESPONDED',
+      title: 'Feedback Responded: $feedbackId',
+      description: '${member?['full_name'] ?? 'Admin'} responded to feedback and set status to $newStatus',
+      category: 'feedback',
+      performedBy: member?['full_name']?.toString() ?? 'Admin',
+      performedById: u?.id,
+      performedByRole: member?['role']?.toString() ?? 'admin',
+    );
+  }
+
+  // ─── Multi-Approval for Expenses (3 Leaders) ──────────────────
+
+  /// Add an approval signature to an expense. Returns the updated approvals list.
+  static Future<List<Map<String, dynamic>>> addExpenseApproval({
+    required String expenseId,
+    required String approverRole,
+  }) async {
+    final u = currentUser;
+    final member = await fetchCurrentMember();
+    final approverName = member?['full_name'] ?? u?.displayName ?? 'Official';
+    final approverId = u?.id ?? '';
+    final now = DateTime.now().toIso8601String();
+
+    final docRef = _firestore.collection('organization_expenses').doc(expenseId);
+    final doc = await docRef.get();
+    if (!doc.exists) throw Exception('Expense not found');
+
+    final data = doc.data()!;
+    final List<dynamic> existingApprovals = data['approvals'] ?? [];
+
+    // Check if this person already approved
+    for (final a in existingApprovals) {
+      if (a is Map && a['approver_id'] == approverId) {
+        throw Exception('You have already signed this expense');
+      }
+    }
+
+    final newApproval = {
+      'approver_id': approverId,
+      'approver_name': approverName,
+      'approver_role': approverRole,
+      'approved_at': now,
+      'fraud_policy_acknowledged': true,
+    };
+
+    existingApprovals.add(newApproval);
+
+    final updateData = <String, dynamic>{
+      'approvals': existingApprovals,
+      'approval_count': existingApprovals.length,
+      'last_approval_at': now,
+    };
+
+    // If 3 approvals reached, mark as fully approved
+    if (existingApprovals.length >= 3) {
+      updateData['status'] = 'approved';
+      updateData['status_updated_at'] = now;
+      updateData['approved_by_name'] = existingApprovals.map((a) => a['approver_name']).join(', ');
+      updateData['authorized_role'] = existingApprovals.map((a) => a['approver_role']).join(', ');
+    }
+
+    await docRef.update(updateData);
+
+    await logAuditEvent(
+      action: existingApprovals.length >= 3 ? 'EXPENSE_FULLY_APPROVED' : 'EXPENSE_APPROVAL_ADDED',
+      title: existingApprovals.length >= 3
+          ? 'Expense FULLY APPROVED (3/3): $expenseId'
+          : 'Expense Approval ${existingApprovals.length}/3: $expenseId',
+      description: '$approverName ($approverRole) signed approval ${existingApprovals.length}/3',
+      category: 'expenses',
+      performedBy: approverName,
+      performedById: approverId,
+      performedByRole: approverRole,
+      metadata: {
+        'expense_id': expenseId,
+        'approval_count': existingApprovals.length,
+        'approver_role': approverRole,
+        'is_fully_approved': existingApprovals.length >= 3,
+      },
+    );
+
+    // If still awaiting more signatures, notify remaining approvers
+    if (existingApprovals.length < 3) {
+      notifyExpenseApprovers(
+        expenseId: expenseId,
+        description: data['description']?.toString() ?? 'Expense',
+        amount: num.tryParse(data['amount']?.toString() ?? '0')?.toDouble() ?? 0.0,
+        currentApprovalCount: existingApprovals.length,
+        reason: 'reminder',
+      ).catchError((_) => 0);
+    }
+
+    return existingApprovals.cast<Map<String, dynamic>>();
+  }
+
+  /// Broadcasts an alert/reminder notification to all officials who hold approval authority
+  /// (Admin, Treasury, Chairperson) regarding a pending expense disbursement.
+  static Future<int> notifyExpenseApprovers({
+    required String expenseId,
+    required String description,
+    required double amount,
+    int currentApprovalCount = 0,
+    String? reason, // 'new_expense' or 'reminder'
+  }) async {
+    try {
+      final members = await adminFetchAllMembers();
+      final leaders = members.where((m) {
+        final r = (m['role'] ?? '').toString().toLowerCase();
+        return r == 'admin' || r == 'treasury' || r == 'chairperson';
+      }).toList();
+
+      if (leaders.isEmpty) return 0;
+
+      final leaderIds = leaders.map((l) => l['id'].toString()).toList();
+      final isReminder = reason == 'reminder';
+      final title = isReminder
+          ? '🔔 REMINDER: Leadership Approval Needed ($currentApprovalCount/3)'
+          : '⚠️ DISBURSEMENT ACTION: 3 Signatures Required ($currentApprovalCount/3)';
+      final message = 'Disbursement of KES ${amount.toStringAsFixed(0)} for "$description" requires 3 leadership signatures ($currentApprovalCount/3 signed). Please review and sign.';
+
+      final u = currentUser;
+      final currentMember = await fetchCurrentMember();
+      final sName = currentMember?['full_name'] ?? u?.displayName ?? 'Leadership';
+      final sRole = currentMember?['role'] ?? 'Official';
+
+      await adminSendNotification(
+        memberIds: leaderIds,
+        title: title,
+        message: message,
+        type: 'alert',
+        senderName: sName,
+        senderId: u?.id,
+        senderRole: sRole,
+      );
+
+      return leaderIds.length;
+    } catch (e) {
+      debugPrint('notifyExpenseApprovers error: $e');
+      return 0;
+    }
   }
 }

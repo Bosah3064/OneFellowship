@@ -122,6 +122,13 @@ class AdminPanelScreen extends StatelessWidget {
                 label: 'Send Broadcast Notifications',
                 onTap: () => Navigator.pushNamed(context, '/manage-notifications'),
               ),
+              const SizedBox(height: 10),
+
+              ActionTile(
+                icon: Icons.inbox_rounded,
+                label: 'Member Feedback & Concerns',
+                onTap: () => Navigator.pushNamed(context, '/admin-feedback'),
+              ),
               const SizedBox(height: 24),
 
               Text(

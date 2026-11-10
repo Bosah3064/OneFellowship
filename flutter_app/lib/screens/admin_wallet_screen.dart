@@ -320,13 +320,35 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
     bool confirmFraudWarning = false;
     final amt = num.tryParse(expense['amount']?.toString() ?? '0') ?? 0;
     final desc = expense['description'] ?? 'No description';
+    
+    // Parse existing approvals
+    final List<dynamic> rawApprovals = expense['approvals'] as List<dynamic>? ?? [];
+    final List<Map<String, dynamic>> approvals = rawApprovals
+        .whereType<Map>()
+        .map((m) => m.cast<String, dynamic>())
+        .toList();
+    
+    final currentUserId = SupabaseService.currentUser?.id;
+    final bool alreadySigned = approvals.any((a) => a['approver_id'] == currentUserId);
+
+    // Auto-detect role
+    try {
+      final curRole = (SupabaseService.currentUser?.userMetadata?['role'] ?? '').toString().toLowerCase();
+      if (curRole.contains('chair')) {
+        selectedRole = 'Chairperson';
+      } else if (curRole.contains('sec')) {
+        selectedRole = 'Secretary';
+      } else {
+        selectedRole = 'Treasurer';
+      }
+    } catch (_) {}
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) {
-          final canApprove = confirmLegit && confirmFraudWarning;
+          final canApprove = confirmLegit && confirmFraudWarning && !alreadySigned;
 
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -348,7 +370,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Authorization & Anti-Fraud Notice',
+                        'Triple Leadership Authorization',
                         style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -356,12 +378,12 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                         ),
                       ),
                       Text(
-                        'Welfare Constitution Clause 5 & 7',
+                        'Welfare Constitution Clause 5 (3 Signatures Required)',
                         style: GoogleFonts.outfit(
-                          fontSize: 11.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: AppColors.error,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ],
@@ -423,6 +445,124 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   ),
                   const SizedBox(height: 14),
 
+                  // Multi-approval progress tracker
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'LEADERSHIP SIGNATURES',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF1E40AF),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E40AF),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${approvals.length} / 3 APPROVED',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (approvals.isEmpty)
+                          Text(
+                            'No leaders have signed yet. 3 distinct signatures required before disbursement.',
+                            style: GoogleFonts.outfit(fontSize: 11.5, color: Colors.blue.shade900),
+                          )
+                        else
+                          ...approvals.asMap().entries.map((entry) {
+                            final idx = entry.key + 1;
+                            final a = entry.value;
+                            final name = a['approver_name'] ?? 'Official';
+                            final r = a['approver_role'] ?? 'Leader';
+                            final dt = (a['approved_at'] ?? '').toString().split('T').first;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      '$idx. $name ($r) • $dt',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        if (approvals.length < 3)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.pending_rounded, color: Colors.amber.shade700, size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Awaiting ${3 - approvals.length} more leader signature(s)',
+                                  style: GoogleFonts.outfit(fontSize: 11.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  if (alreadySigned) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_rounded, color: Colors.amber.shade800, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'You have already signed this request. A different leader must provide the remaining signature.',
+                              style: GoogleFonts.outfit(fontSize: 11.5, color: Colors.amber.shade900, height: 1.3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
                   // Mandatory Fraud Warning Banner
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -451,8 +591,8 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '• Triple Authorization (Clause 5): All withdrawals, disbursements, and payments must be authorized by the Chairperson, Secretary, and Treasurer. No single official may authorize withdrawals independently.\n'
-                          '• Misappropriation & Fraud (Clause 7): Any embezzlement or unauthorized payout results in immediate restriction from fund access, suspension from duties pending independent audit, and criminal legal prosecution.',
+                          '• Triple Authorization (Clause 5): All withdrawals, disbursements, and payments must be authorized by three leaders (e.g., Chairperson, Secretary, and Treasurer). No single official may authorize withdrawals independently.\n'
+                          '• Misappropriation & Fraud (Clause 7): Any embezzlement or unauthorized payout results in immediate restriction from fund access, suspension from duties pending independent audit, and criminal prosecution.',
                           style: GoogleFonts.outfit(
                             fontSize: 11,
                             color: const Color(0xFF7F1D1D),
@@ -466,7 +606,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
 
                   // Approving Official Role
                   Text(
-                    'Signing Official Role',
+                    'Your Signing Role',
                     style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 6),
@@ -497,11 +637,11 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                         value: confirmLegit,
                         activeColor: AppColors.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        onChanged: (val) => setD(() => confirmLegit = val ?? false),
+                        onChanged: alreadySigned ? null : (val) => setD(() => confirmLegit = val ?? false),
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setD(() => confirmLegit = !confirmLegit),
+                          onTap: alreadySigned ? null : () => setD(() => confirmLegit = !confirmLegit),
                           child: Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
@@ -522,11 +662,11 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                         value: confirmFraudWarning,
                         activeColor: AppColors.error,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        onChanged: (val) => setD(() => confirmFraudWarning = val ?? false),
+                        onChanged: alreadySigned ? null : (val) => setD(() => confirmFraudWarning = val ?? false),
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setD(() => confirmFraudWarning = !confirmFraudWarning),
+                          onTap: alreadySigned ? null : () => setD(() => confirmFraudWarning = !confirmFraudWarning),
                           child: Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
@@ -560,31 +700,37 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                 onPressed: canApprove
                     ? () async {
                         Navigator.pop(ctx);
-                        final user = SupabaseService.currentUser;
-                        await _updateExpenseStatus(
-                          expense['id'],
-                          'approved',
-                          auditTrail: {
-                            'approved_by_id': user?.id,
-                            'approved_by_name': user?.displayName ?? 'Official',
-                            'approver_role': selectedRole,
-                            'fraud_policy_acknowledged': true,
-                            'authorized_at': DateTime.now().toIso8601String(),
-                          },
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ Approved by $selectedRole in compliance with Clause 5 & 7'),
-                              backgroundColor: AppColors.success,
-                            ),
+                        try {
+                          final updated = await SupabaseService.addExpenseApproval(
+                            expenseId: expense['id'],
+                            approverRole: selectedRole,
                           );
+                          await _loadWalletData();
+                          if (mounted) {
+                            final count = updated.length;
+                            final msg = count >= 3
+                                ? '✅ Fully Authorized (3/3 Leaders)! Expense marked as Approved.'
+                                : '✅ Signed as $selectedRole ($count/3 Leaders). Awaiting ${3 - count} more signature(s).';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(msg),
+                                backgroundColor: count >= 3 ? AppColors.success : AppColors.primary,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                            );
+                          }
                         }
                       }
                     : null,
                 icon: const Icon(Icons.verified_rounded, color: Colors.white, size: 16),
                 label: Text(
-                  'Authorize & Approve',
+                  alreadySigned ? 'Already Signed' : 'Sign & Authorize (${approvals.length}/3)',
                   style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white),
                 ),
               ),
@@ -720,6 +866,11 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                               ? dateStr.substring(0, 10)
                               : 'Unknown date';
 
+                            final rawApprovals = expense['approvals'] as List<dynamic>? ?? [];
+                            final approvalsList = rawApprovals.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+                            final currentUserId = SupabaseService.currentUser?.id;
+                            final bool alreadySigned = approvalsList.any((a) => a['approver_id'] == currentUserId);
+
                             Color statusColor = AppColors.warning;
                             IconData statusIcon = Icons.pending_actions;
                             if (status == 'approved') { statusColor = AppColors.success; statusIcon = Icons.check_circle; }
@@ -754,7 +905,17 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                                 'Recorded by: ${expense['recorded_by_name'] ?? expense['members']?['full_name'] ?? 'Authority'} (${expense['recorded_by_role'] ?? 'Leadership'}) • $formattedDate', 
                                                 style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w500),
                                               ),
-                                              if (expense['approved_by_name'] != null) ...[
+                                              if (approvalsList.isNotEmpty) ...[
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Signed by: ${approvalsList.map((a) => "${a['approver_name']} (${a['approver_role']})").join(', ')}',
+                                                  style: GoogleFonts.outfit(
+                                                    color: status == 'approved' ? AppColors.success : const Color(0xFF1E40AF),
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ] else if (expense['approved_by_name'] != null) ...[
                                                 const SizedBox(height: 2),
                                                 Text(
                                                   'Authorized by: ${expense['approved_by_name']} (${expense['authorized_role'] ?? 'Executive'})',
@@ -772,7 +933,12 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                               decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                                              child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                                              child: Text(
+                                                status == 'pending'
+                                                    ? '${approvalsList.length}/3 SIGNED'
+                                                    : status.toUpperCase(),
+                                                style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -785,6 +951,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                       Row(
                                         children: [
                                           Expanded(
+                                            flex: 2,
                                             child: OutlinedButton.icon(
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: AppColors.error,
@@ -793,22 +960,57 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                               ),
                                               onPressed: () => _updateExpenseStatus(expense['id'], 'rejected'),
-                                              icon: const Icon(Icons.close_rounded, size: 18),
-                                              label: Text('Reject', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                                              icon: const Icon(Icons.close_rounded, size: 16),
+                                              label: Text('Reject', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13)),
                                             ),
                                           ),
-                                          const SizedBox(width: 12),
+                                          const SizedBox(width: 8),
+                                          IconButton.filledTonal(
+                                            tooltip: 'Remind Leaders to Approve',
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: Colors.amber.shade100,
+                                              padding: const EdgeInsets.all(12),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                            ),
+                                            onPressed: () async {
+                                              final count = await SupabaseService.notifyExpenseApprovers(
+                                                expenseId: expense['id'],
+                                                description: expense['description']?.toString() ?? 'Expense',
+                                                amount: amt.toDouble(),
+                                                currentApprovalCount: approvalsList.length,
+                                                reason: 'reminder',
+                                              );
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('🔔 Sent approval reminder notification to $count leader(s)!'),
+                                                    backgroundColor: AppColors.primary,
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            icon: Icon(Icons.notifications_active_rounded, color: Colors.amber.shade900, size: 20),
+                                          ),
+                                          const SizedBox(width: 8),
                                           Expanded(
+                                            flex: 3,
                                             child: ElevatedButton.icon(
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: AppColors.success,
+                                                backgroundColor: alreadySigned ? Colors.blue.shade700 : AppColors.success,
                                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                                 elevation: 0,
                                               ),
                                               onPressed: () => _showApprovalWithFraudWarningDialog(expense),
-                                              icon: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 18),
-                                              label: Text('Authorize', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
+                                              icon: Icon(
+                                                alreadySigned ? Icons.check_circle_outline_rounded : Icons.verified_user_rounded,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                              label: Text(
+                                                alreadySigned ? 'Signed (${approvalsList.length}/3)' : 'Sign (${approvalsList.length}/3)',
+                                                style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13),
+                                              ),
                                             ),
                                           ),
                                         ],

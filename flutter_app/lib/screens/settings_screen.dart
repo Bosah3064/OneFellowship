@@ -5,6 +5,7 @@ import '../app_colors.dart';
 import '../services/supabase_service.dart';
 import '../services/biometric_service.dart';
 import '../services/offline_cache_service.dart';
+import '../services/role_permissions.dart';
 import 'complete_profile_screen.dart';
 import 'login_screen.dart';
 
@@ -462,18 +463,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
 
-                // Admin Controls (Visible to admins, treasury, and chairperson)
-                if (['admin', 'treasury', 'chairperson'].contains(role)) ...[
+                // Admin Controls (Granular RBAC: Admin, Treasury, Chairperson)
+                if (RolePermissions.isLeadership(role)) ...[
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                      child: Text(
-                        'Admin Controls',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Leadership & Governance',
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: RolePermissions.getRoleColor(role).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              RolePermissions.getRoleDisplayName(role).toUpperCase(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: RolePermissions.getRoleColor(role),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -488,25 +509,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         child: Column(
                           children: [
-                            _buildActionRow(Icons.group_rounded, 'Manage Members', () {
-                              Navigator.pushNamed(context, '/manage-members');
-                            }),
-                            _buildDivider(),
-                            _buildActionRow(Icons.receipt_long_rounded, 'Manage Payments', () {
-                              Navigator.pushNamed(context, '/manage-payments');
-                            }),
-                            _buildDivider(),
-                            _buildActionRow(Icons.campaign_rounded, 'Send Notifications', () {
-                              Navigator.pushNamed(context, '/manage-notifications');
-                            }),
-                            _buildDivider(),
-                            _buildActionRow(Icons.account_balance_wallet_rounded, 'Organization Wallet', () {
-                              Navigator.pushNamed(context, '/admin-wallet');
-                            }),
-                            _buildDivider(),
-                            _buildActionRow(Icons.security_rounded, 'Security & Audit Logs', () {
-                              Navigator.pushNamed(context, '/admin-audit-logs');
-                            }),
+                            if (RolePermissions.hasPermission(role, AppPermission.manageMembers)) ...[
+                              _buildActionRow(Icons.group_rounded, 'Manage Members & Roles', () {
+                                Navigator.pushNamed(context, '/manage-members');
+                              }),
+                              _buildDivider(),
+                            ],
+                            if (RolePermissions.hasPermission(role, AppPermission.managePayments)) ...[
+                              _buildActionRow(Icons.receipt_long_rounded, 'Manage Payments & Ledger', () {
+                                Navigator.pushNamed(context, '/manage-payments');
+                              }),
+                              _buildDivider(),
+                            ],
+                            if (RolePermissions.hasPermission(role, AppPermission.sendNotifications)) ...[
+                              _buildActionRow(Icons.campaign_rounded, 'Send Broadcast Notifications', () {
+                                Navigator.pushNamed(context, '/manage-notifications');
+                              }),
+                              _buildDivider(),
+                            ],
+                            if (RolePermissions.hasPermission(role, AppPermission.manageWallet)) ...[
+                              _buildActionRow(Icons.account_balance_wallet_rounded, 'Organization Wallet & Approvals', () {
+                                Navigator.pushNamed(context, '/admin-wallet');
+                              }),
+                              _buildDivider(),
+                            ],
+                            if (RolePermissions.hasPermission(role, AppPermission.manageFeedback)) ...[
+                              _buildActionRow(Icons.inbox_rounded, 'Member Feedback & Concerns (Admin)', () {
+                                Navigator.pushNamed(context, '/admin-feedback');
+                              }),
+                              _buildDivider(),
+                            ],
+                            if (RolePermissions.hasPermission(role, AppPermission.viewAuditLogs)) ...[
+                              _buildActionRow(Icons.security_rounded, 'Security & Audit Logs (Admin Only)', () {
+                                Navigator.pushNamed(context, '/admin-audit-logs');
+                              }),
+                            ],
                           ],
                         ),
                       ),
@@ -514,12 +551,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
 
-                // About & Policies
+                // Member Services & Feedback (Available to all members)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                     child: Text(
-                      'ABOUT & POLICIES',
+                      'MEMBER SERVICES & FEEDBACK',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -538,9 +575,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: const Color(0xFFF3F4F6)),
                       ),
-                      child: _buildActionRow(Icons.menu_book_rounded, 'Welfare Constitution & Policies', () {
-                        Navigator.pushNamed(context, '/terms-and-conditions');
-                      }),
+                      child: Column(
+                        children: [
+                          _buildActionRow(Icons.feedback_outlined, 'Submit Feedback & Concerns', () {
+                            Navigator.pushNamed(context, '/feedback');
+                          }),
+                          _buildDivider(),
+                          _buildActionRow(Icons.menu_book_rounded, 'Welfare Constitution & Policies', () {
+                            Navigator.pushNamed(context, '/terms-and-conditions');
+                          }),
+                        ],
+                      ),
                     ),
                   ),
                 ),

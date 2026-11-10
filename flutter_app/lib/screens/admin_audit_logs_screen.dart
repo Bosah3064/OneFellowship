@@ -24,6 +24,9 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
     'expenses',
     'payouts',
     'payments',
+    'feedback',
+    'members',
+    'security',
   ];
 
   @override
@@ -35,6 +38,18 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
   Future<void> _loadLogs() async {
     setState(() => _isLoading = true);
     try {
+      final member = await SupabaseService.fetchCurrentMember();
+      final role = (member?['role'] ?? '').toString().toLowerCase();
+      if (role != 'admin' && role != 'chairperson') {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Access restricted: Audit trails are strictly viewable by Administrators only.')),
+          );
+        }
+        return;
+      }
+
       final logs = await SupabaseService.fetchAuditLogs();
       if (mounted) {
         setState(() {

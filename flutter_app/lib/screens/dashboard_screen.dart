@@ -914,6 +914,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 12),
                               _buildQuickAction(Icons.download_rounded, 'Save\nCard', AppColors.skyBlue, _showDownloadOptions),
                               const SizedBox(width: 12),
+                              _buildQuickAction(Icons.feedback_outlined, 'Feedback\n& Concerns', const Color(0xFF0284C7), () {
+                                Navigator.pushNamed(context, '/feedback');
+                              }),
+                              if (_member != null && ['admin', 'treasury', 'chairperson'].contains((_member!['role'] ?? '').toString().toLowerCase())) ...[
+                                const SizedBox(width: 12),
+                                _buildQuickAction(Icons.admin_panel_settings_rounded, 'Admin\nPanel', const Color(0xFF1E3A8A), () {
+                                  Navigator.pushNamed(context, '/admin');
+                                }),
+                              ],
+                              const SizedBox(width: 12),
                               _buildQuickAction(Icons.settings_rounded, 'Settings', AppColors.warning, () async {
                                 await Navigator.pushNamed(context, SettingsScreen.route);
                                 final updatedTheme = await OfflineCacheService.getPreferredTheme();

@@ -22,8 +22,12 @@ import 'screens/admin_audit_logs_screen.dart';
 import 'screens/terms_and_conditions_screen.dart';
 import 'screens/terminated_account_screen.dart';
 import 'screens/force_change_password_screen.dart';
+import 'screens/feedback_screen.dart';
+import 'screens/admin_feedback_screen.dart';
 import 'services/biometric_service.dart';
 import 'services/supabase_service.dart';
+import 'services/role_permissions.dart';
+import 'widgets/role_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -174,16 +178,18 @@ class OneFellowshipApp extends StatelessWidget {
         ForceChangePasswordScreen.route: (_) => const ForceChangePasswordScreen(),
         DashboardScreen.route: (_) => const DashboardScreen(),
         PaymentHistoryScreen.route: (_) => const PaymentHistoryScreen(),
-        AdminPanelScreen.route: (_) => const AdminPanelScreen(),
-        ManageMembersScreen.route: (_) => const ManageMembersScreen(),
-        ManagePaymentsScreen.route: (_) => const ManagePaymentsScreen(),
-        ManageNotificationsScreen.route: (_) => const ManageNotificationsScreen(),
-        AdminWalletScreen.route: (_) => const AdminWalletScreen(),
-        AdminAuditLogsScreen.route: (_) => const AdminAuditLogsScreen(),
+        AdminPanelScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.accessAdminPanel, child: AdminPanelScreen()),
+        ManageMembersScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.manageMembers, child: ManageMembersScreen()),
+        ManagePaymentsScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.managePayments, child: ManagePaymentsScreen()),
+        ManageNotificationsScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.sendNotifications, child: ManageNotificationsScreen()),
+        AdminWalletScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.manageWallet, child: AdminWalletScreen()),
+        AdminAuditLogsScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.viewAuditLogs, child: AdminAuditLogsScreen()),
+        AdminFeedbackScreen.route: (_) => const RoleGuard(requiredPermission: AppPermission.manageFeedback, child: AdminFeedbackScreen()),
         SettingsScreen.route: (_) => const SettingsScreen(),
         NotificationsScreen.route: (_) => const NotificationsScreen(),
         TermsAndConditionsScreen.route: (_) => const TermsAndConditionsScreen(),
         TerminatedAccountScreen.route: (_) => const TerminatedAccountScreen(),
+        FeedbackScreen.route: (_) => const FeedbackScreen(),
       },
     );
   }
