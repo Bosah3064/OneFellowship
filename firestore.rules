@@ -3,7 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // =========================================================================
+    // HELPER FUNCTIONS & ROLE DEFINITIONS
+    // =========================================================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -16,103 +19,203 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/members/$(userId));
     }
 
-    function getUserRole() {
+    function getUserData() {
       return (isAuthenticated() && isMemberDoc(request.auth.uid))
-        ? get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role
-        : 'member';
+        ? get(/databases/$(database)/documents/members/$(request.auth.uid)).data
+        : {};
     }
 
+    function getUserRole() {
+      return getUserData().get('role', 'member');
+    }
+
+    function isSuperAdminEmail() {
+      return isAuthenticated() && (
+        request.auth.token.email in [
+          'bosah3064@gmail.com',
+          'lame3064@gmail.com',
+          'admin@onefellowship.org'
+        ]
+      );
+    }
+
+    // Administrator: Operations, Registry, Notifications, Feedback & Audit Trails
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email in ['bosah3064@gmail.com', 'lame3064@gmail.com', 'admin@onefellowship.org'] ||
+        isSuperAdminEmail() ||
         getUserRole() in ['admin', 'superadmin']
       );
     }
 
-    function isExecutive() {
+    // Chairperson: Supreme Executive Authority & Disciplinary Oversight
+    function isChairperson() {
+      return isAuthenticated() && (
+        isSuperAdminEmail() ||
+        getUserRole() in ['chairperson', 'chairman']
+      );
+    }
+
+    // Treasury: Financial Custodian & Ledger
+    function isTreasury() {
+      return isAuthenticated() && (
+        getUserRole() in ['treasury', 'treasurer']
+      );
+    }
+
+    // General Leadership: Admin, Chairperson, Treasury, or Executive Committee
+    function isLeadership() {
       return isAuthenticated() && (
         isAdmin() ||
-        getUserRole() in ['treasury', 'chairperson', 'vice_chairperson']
+        isChairperson() ||
+        isTreasury() ||
+        getUserRole() in ['secretary', 'vice_chairperson', 'official']
       );
     }
 
     // =========================================================================
-    // MEMBERS COLLECTION
-    // Document ID matches the user's Firebase Auth UID
+    // 1. MEMBERS COLLECTION (Registry, KYC, Status)
     // =========================================================================
     match /members/{memberId} {
-      // Any authenticated user can read directory
+      // Authenticated members can read directory profiles
       allow read: if isAuthenticated();
 
-      // Authenticated users can create their own member record or executives can create members
-      allow create: if isAuthenticated() && (isOwner(memberId) || isExecutive());
+      // Authenticated users can create their own member record or leadership can provision
+      allow create: if isAuthenticated() && (isOwner(memberId) || isLeadership());
 
-      // Users can update their own profile and form_details.
-      // Executives and admins can update all fields.
+      // Profile updates:
+      // - Leadership (Admin/Chairperson) can update all fields including role and status
+      // - Members can update their personal profile details (contact, form_details, themes, KYC),
+      //   but cannot self-elevate roles or un-terminate their own account status
       allow update: if isAuthenticated() && (
-        isExecutive() || 
-        isOwner(memberId)
+        isAdmin() ||
+        isChairperson() ||
+        (
+          isOwner(memberId) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'is_terminated', 'terminated_at']))
+        ) ||
+        (isTreasury() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'is_terminated']))
       );
 
-      // Only admins can delete members
-      allow delete: if isAdmin();
+      // Only Chairperson or Superadmin can permanently delete member records
+      allow delete: if isChairperson() || isAdmin();
     }
 
     // =========================================================================
-    // PAYMENTS COLLECTION
+    // 2. PAYMENTS COLLECTION (Contributions, Registration Fees, Payouts)
     // =========================================================================
     match /payments/{paymentId} {
-      // Members can read their own payments; executives can read all payments
+      // Members can read their own payments; leadership can read all payments
       allow read: if isAuthenticated() && (
-        isExecutive() || 
+        isLeadership() || 
         resource.data.member_id == request.auth.uid
       );
 
-      // Executives can record, edit, or delete payments
-      // Authenticated users can record a pending payment for themselves
+      // Leadership can record payments; members can record pending submissions for themselves
       allow create: if isAuthenticated() && (
-        isExecutive() || 
+        isLeadership() || 
         request.resource.data.member_id == request.auth.uid
       );
       
-      allow update, delete: if isExecutive();
+      // Leadership can reconcile, update, or void payments
+      allow update, delete: if isLeadership();
     }
 
     // =========================================================================
-    // NOTIFICATIONS COLLECTION
+    // 3. NOTIFICATIONS COLLECTION (Broadcasts, Alerts, Approver Reminders)
     // =========================================================================
     match /notifications/{notificationId} {
-      // Members can read notifications sent to 'all' or to their specific UID
+      // Members can read notifications sent to them (via member_id or recipient) or broadcast 'all'
       allow read: if isAuthenticated() && (
-        resource.data.recipient == 'all' || 
+        resource.data.member_id == request.auth.uid ||
         resource.data.recipient == request.auth.uid ||
-        isExecutive()
+        resource.data.recipient == 'all' ||
+        isLeadership()
       );
 
-      // Users can mark notifications as read
+      // Members can mark their own notifications as read
+      // Leadership can manage notifications
       allow update: if isAuthenticated() && (
-        isExecutive() ||
-        (resource.data.recipient == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read']))
+        isLeadership() ||
+        (
+          (resource.data.member_id == request.auth.uid || resource.data.recipient == request.auth.uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read'])
+        )
       );
 
-      // Executives can broadcast and manage notifications
-      allow create, delete: if isExecutive();
+      // Leadership or system triggers can create notifications (e.g. approver alerts)
+      allow create: if isAuthenticated();
+
+      // Only administrators can delete sent broadcasts
+      allow delete: if isAdmin() || isChairperson();
     }
 
     // =========================================================================
-    // ORGANIZATION EXPENSES COLLECTION
+    // 4. ORGANIZATION EXPENSES COLLECTION (Clause 5 Triple Authorization)
     // =========================================================================
     match /organization_expenses/{expenseId} {
+      // All authenticated members can view the transparency expense ledger
       allow read: if isAuthenticated();
-      allow write: if isExecutive();
+
+      // Financial leadership can record new expenses
+      allow create: if isLeadership();
+
+      // Leadership can sign approvals (Triple Authorization), reject, or update
+      allow update: if isLeadership();
+
+      // Only Chairperson or Admin can remove erroneous entries
+      allow delete: if isChairperson() || isAdmin();
     }
 
     // =========================================================================
-    // FORM SCHEMA COLLECTION
+    // 5. MEMBER FEEDBACK & CONCERNS COLLECTION (Confidential to Admins)
+    // =========================================================================
+    match /feedback/{feedbackId} {
+      // Submitting member can view their own feedback; Admins and Chairperson can view all
+      allow read: if isAuthenticated() && (
+        resource.data.member_id == request.auth.uid ||
+        isAdmin() ||
+        isChairperson()
+      );
+
+      // Any authenticated member can submit confidential feedback for themselves
+      allow create: if isAuthenticated() && (
+        request.resource.data.member_id == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Only Administrators and Chairperson can respond, change status, or resolve
+      allow update: if isAdmin() || isChairperson();
+
+      // Only Administrators and Chairperson can remove feedback
+      allow delete: if isAdmin() || isChairperson();
+    }
+
+    // =========================================================================
+    // 6. SECURITY & AUDIT TRAILS COLLECTION (Clause 6 Immutable Logs)
+    // =========================================================================
+    match /audit_logs/{logId} {
+      // Strictly viewable by Administrators and Chairperson only
+      // Regular members and Treasury CANNOT read audit trails
+      allow read: if isAdmin() || isChairperson();
+
+      // Authenticated users can write log entries to record auditable actions
+      allow create: if isAuthenticated();
+
+      // IMMUTABLE: Audit trails can NEVER be edited or deleted by anyone
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // 7. FORM SCHEMA COLLECTION (Dynamic Registration Schema)
     // =========================================================================
     match /form_schema/{schemaId} {
       allow read: if isAuthenticated();
-      allow write: if isExecutive();
+      allow write: if isAdmin() || isChairperson();
+    }
+
+    // Default deny for unmapped paths
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
