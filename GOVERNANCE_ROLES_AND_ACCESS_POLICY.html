@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneFellowship Welfare Association - Governance & RBAC Policy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1d5f99;
+      --primary-dark: #123e66;
+      --secondary: #d4af37;
+      --text-main: #1f2937;
+      --text-muted: #4b5563;
+      --border-color: #e5e7eb;
+      --bg-soft: #f8fafc;
+      --success: #16a34a;
+      --error: #dc2626;
+      --warning: #d97706;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-main);
+      background-color: #f1f5f9;
+      line-height: 1.6;
+      padding: 30px 15px;
+    }
+
+    .doc-container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 50px 60px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+      border: 1px solid var(--border-color);
+    }
+
+    /* Header */
+    .header {
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+      position: relative;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .org-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--primary-dark);
+      letter-spacing: -0.5px;
+      text-transform: uppercase;
+    }
+
+    .org-subtitle {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-top: 4px;
+    }
+
+    .seal-badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: linear-gradient(135deg, #1d5f99, #123e66);
+      color: white;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .metadata-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      background: var(--bg-soft);
+      padding: 14px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      margin-top: 20px;
+    }
+
+    .meta-item {
+      font-size: 12px;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+      font-weight: 500;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .meta-val {
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Notice banner */
+    .notice-card {
+      background: #eff6ff;
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 0 10px 10px 0;
+      margin-bottom: 36px;
+      font-size: 13.5px;
+      color: #1e3a8a;
+    }
+
+    /* Section Styles */
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-top: 36px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-top: 24px;
+      margin-bottom: 10px;
+    }
+
+    p {
+      font-size: 14px;
+      color: var(--text-main);
+      margin-bottom: 12px;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 16px;
+      font-size: 13.5px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    /* Role Cards */
+    .role-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 20px;
+      margin-bottom: 28px;
+    }
+
+    .role-card {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      background: #ffffff;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    .role-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(29, 95, 153, 0.08);
+    }
+
+    .role-card.member { border-top: 4px solid #64748b; }
+    .role-card.treasury { border-top: 4px solid #16a34a; }
+    .role-card.admin { border-top: 4px solid #2563eb; }
+    .role-card.chairperson { border-top: 4px solid #d97706; }
+
+    .role-badge {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .role-badge.member { background: #f1f5f9; color: #475569; }
+    .role-badge.treasury { background: #dcfce7; color: #15803d; }
+    .role-badge.admin { background: #dbeafe; color: #1e40af; }
+    .role-badge.chairperson { background: #fef3c7; color: #b45309; }
+
+    .role-name {
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .role-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .role-details {
+      font-size: 12.5px;
+    }
+
+    .role-details strong {
+      display: block;
+      margin-top: 8px;
+      margin-bottom: 4px;
+      font-size: 11.5px;
+      color: var(--primary-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Table */
+    .table-responsive {
+      overflow-x: auto;
+      margin-top: 20px;
+      margin-bottom: 30px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--bg-soft);
+      padding: 12px 14px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--primary-dark);
+      border-bottom: 2px solid var(--border-color);
+      border-top: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
+    }
+
+    tr:nth-child(even) td {
+      background: #fafafa;
+    }
+
+    .check-yes {
+      color: var(--success);
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .check-no {
+      color: #9ca3af;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Highlights / Safeguards */
+    .safeguards-box {
+      background: var(--bg-soft);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 22px;
+      margin-top: 20px;
+      margin-bottom: 28px;
+    }
+
+    .safeguard-item {
+      margin-bottom: 16px;
+    }
+
+    .safeguard-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .safeguard-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    /* Sign-off Block */
+    .signature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 2px solid var(--border-color);
+    }
+
+    .sig-col {
+      border: 1px dashed var(--border-color);
+      padding: 16px;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    .sig-role {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 28px;
+    }
+
+    .sig-line {
+      border-bottom: 1px solid #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .sig-name {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* Print styling */
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .doc-container {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        max-width: 100%;
+      }
+
+      .role-grid {
+        grid-template-columns: 1fr 1fr;
+        page-break-inside: avoid;
+      }
+
+      table {
+        page-break-inside: avoid;
+      }
+
+      .signature-grid {
+        page-break-inside: avoid;
+      }
+
+      .print-btn {
+        display: none !important;
+      }
+    }
+
+    .print-btn {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 30px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .print-btn:hover {
+      background: var(--primary-dark);
+    }
+  </style>
+</head>
+<body>
+
+  <button class="print-btn" onclick="window.print()">
+    🖨️ Print / Save as PDF
+  </button>
+
+  <div class="doc-container">
+    
+    <!-- Header -->
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="org-title">OneFellowship Welfare Association</div>
+          <div class="org-subtitle">Institutional Governance & Role-Based Access Control (RBAC) Charter</div>
+        </div>
+        <div class="seal-badge">Official Document</div>
+      </div>
+
+      <div class="metadata-grid">
+        <div class="meta-item">
+          <span class="meta-label">Document Ref</span>
+          <span class="meta-val">OFW-GOV-RBAC-2026-V1</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Effective Date</span>
+          <span class="meta-val">November 2026</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Governing Clauses</span>
+          <span class="meta-val">Constitution Clauses 4, 5, 6, 7 & 8</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">System Platform</span>
+          <span class="meta-val">OneFellowship Mobile v1.0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notice Card -->
+    <div class="notice-card">
+      <strong>MANDATORY POLICY NOTICE:</strong> This charter establishes the formal digital permissions, administrative boundaries, and operational safeguards governing the OneFellowship mobile application. Every authorized official and covenant member is strictly bound by these standards upon ratification.
+    </div>
+
+    <!-- 1. Executive Summary -->
+    <h2>1. Executive Summary & Governance Principles</h2>
+    <p>
+      The OneFellowship Welfare mobile platform is structured on an immutable foundation of <strong>Role-Based Access Control (RBAC)</strong>, cryptographic logging, and multi-tier biometric security. The system architecture enforces four core tenets:
+    </p>
+    <ul>
+      <li><strong>Separation of Powers:</strong> Financial custody, registry administration, and executive discipline are kept distinct. No single individual possesses unchecked power.</li>
+      <li><strong>Triple Leadership Authorization (Clause 5):</strong> Every financial disbursement requires <strong>three (3) independent executive signatures</strong> before funds can be released.</li>
+      <li><strong>Confidential Audit Trails (Clause 6):</strong> System activity logs are restricted exclusively to Administrative Officials and the Chairperson to prevent tampering and protect member privacy.</li>
+      <li><strong>Direct Member Voice:</strong> Every registered member has an encrypted, confidential channel to submit concerns, complaints, and welfare needs directly to the Executive Leadership.</li>
+    </ul>
+
+    <!-- 2. Defined Roles -->
+    <h2>2. Defined Roles & Scope of Authority</h2>
+    <div class="role-grid">
+      
+      <!-- Role 1: Member -->
+      <div class="role-card member">
+        <span class="role-badge member">Assembly Member</span>
+        <div class="role-name">1. General Member</div>
+        <div class="role-desc">Ratified covenant member of the fellowship.</div>
+        <div class="role-details">
+          <strong>Key Responsibilities:</strong>
+          Maintain active status through monthly welfare contributions (KES 1,000); keep verified KYC, Next of Kin, Dependants, and Residential Location updated.
+          <strong>System Clearance:</strong>
+          Personal Dashboard, Virtual ID Card, Payment Ledger & Receipts, Constitution Charter, and Direct Feedback Submission.
+        </div>
+      </div>
+
+      <!-- Role 2: Treasury -->
+      <div class="role-card treasury">
+        <span class="role-badge treasury">Financial Custodian</span>
+        <div class="role-name">2. Treasurer</div>
+        <div class="role-desc">Chief custodian of funds, ledger, and disbursements.</div>
+        <div class="role-details">
+          <strong>Key Responsibilities:</strong>
+          Monitor collections and bank accounts; reconcile payment entries; record expenses with mandatory receipts; serve as First Signatory for payouts.
+          <strong>System Clearance:</strong>
+          Organization Wallet, Cash Balance Metrics, Expense Recording, Co-signing Disbursements (Clause 5), and Financial Data Exports.
+        </div>
+      </div>
+
+      <!-- Role 3: Administrator -->
+      <div class="role-card admin">
+        <span class="role-badge admin">Operations & Registry</span>
+        <div class="role-name">3. Administrator / Secretary</div>
+        <div class="role-desc">Registrar, communications director, and records manager.</div>
+        <div class="role-details">
+          <strong>Key Responsibilities:</strong>
+          Maintain member registry; verify member KYC identity; dispatch broadcast alerts; receive and resolve member concerns; review audit trails.
+          <strong>System Clearance:</strong>
+          Member Registry Management, Push Broadcasts, Feedback Review & Response, Security & Audit Logs, and Co-signing Disbursements.
+        </div>
+      </div>
+
+      <!-- Role 4: Chairperson -->
+      <div class="role-card chairperson">
+        <span class="role-badge chairperson">Supreme Oversight</span>
+        <div class="role-name">4. Chairperson</div>
+        <div class="role-desc">Executive Chairman of the Board of Trustees.</div>
+        <div class="role-details">
+          <strong>Key Responsibilities:</strong>
+          Preside over fellowship meetings and disciplinary tribunals; execute member terminations under Article 7; approve role promotions; grant final fund approvals.
+          <strong>System Clearance:</strong>
+          Full Executive Clearance (All system modules), Member Termination & Reinstatement, Role Assignment, and Final Fund Disbursement Sign-off.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3. Permission Matrix -->
+    <h2>3. Comprehensive Role-Based Permission Matrix</h2>
+    <p>The table below summarizes every screen, capability, and action enforced across the application:</p>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Functional Area / Feature</th>
+            <th style="text-align: center;">Member</th>
+            <th style="text-align: center;">Treasurer</th>
+            <th style="text-align: center;">Administrator</th>
+            <th style="text-align: center;">Chairperson</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Member Dashboard & Virtual ID Card</strong></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Personal Payment History & Receipts</strong></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Welfare Constitution (9 Chapters)</strong></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Submit Feedback & Confidential Concerns</strong></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Organization Wallet & Cash Inflows</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Record New Organization Expenses</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Co-Sign Expense Authorization (Clause 5)</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Remind Approvers ("Nudge Leaders" Button)</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Manage Financial Ledger & Confirmations</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Export Financial Spreadsheets (CSV/Excel)</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Manage Member KYC Sheets & Verification</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Send Broadcast Push Notifications</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Review & Officially Respond to Concerns</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>View Security & Chronological Audit Trails</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Execute Disciplinary Termination (Article 7)</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Reinstate Terminated Accounts on Appeal</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Promote / Assign / Change System Roles</strong></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-no">⛔ No</span></td>
+            <td style="text-align: center;"><span class="check-yes">✅ Yes</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 4. Key Safeguards -->
+    <h2>4. Special Fiduciary & Operational Safeguards</h2>
+    
+    <div class="safeguards-box">
+      <div class="safeguard-item">
+        <div class="safeguard-title">🛡️ Triple Leadership Authorization for Expenses (Clause 5)</div>
+        <p>
+          No single official has unilateral disbursement authority. All expenses entered into the system must achieve <strong>three (3) independent signatures</strong> (e.g., Treasurer, Administrator, Chairperson). Automated push notifications alert signers upon expense entry and progress milestones. An official cannot sign twice for the same transaction.
+        </p>
+      </div>
+
+      <div class="safeguard-item">
+        <div class="safeguard-title">🔒 Audit Trail Confidentiality & Integrity (Clause 6)</div>
+        <p>
+          Every system action—from payment approvals and role modifications to broadcast messages and login attempts—is permanently written to a tamper-proof audit log. Access is strictly quarantined to Administrators and the Chairperson to prevent intimidation or financial interference.
+        </p>
+      </div>
+
+      <div class="safeguard-item">
+        <div class="safeguard-title">⛔ Article 7 Account Lockout Safeguards</div>
+        <p>
+          Members terminated for constitutional default (Two-Case Default rule) or gross misconduct are immediately barred from the app. Upon launch, a formal revocation notice confirms grounds of expulsion, date of action, Next of Kin formal service, and authorized appeal procedures.
+        </p>
+      </div>
+    </div>
+
+    <!-- 5. Signatures -->
+    <h2>5. Ratification & Authorization Sign-Off</h2>
+    <p>
+      By executing this charter, the Executive Committee affirms that these standards represent the binding policy of OneFellowship Welfare Association.
+    </p>
+
+    <div class="signature-grid">
+      <div class="sig-col">
+        <div class="sig-role">Chairperson</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Sign & Date</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-role">Secretary / Admin</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Sign & Date</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-role">Treasurer</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Sign & Date</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
