@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app_colors.dart';
 import '../services/supabase_service.dart';
 import '../services/offline_cache_service.dart';
+import '../services/role_permissions.dart';
 import '../widgets/virtual_card.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -571,8 +572,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ) ?? false;
-        if (shouldExit && context.mounted) {
-          Navigator.of(context).pop();
+        if (shouldExit) {
+          await SystemNavigator.pop();
         }
       },
       child: Scaffold(
@@ -917,7 +918,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               _buildQuickAction(Icons.feedback_outlined, 'Feedback\n& Concerns', const Color(0xFF0284C7), () {
                                 Navigator.pushNamed(context, '/feedback');
                               }),
-                              if (_member != null && ['admin', 'treasury', 'chairperson'].contains((_member!['role'] ?? '').toString().toLowerCase())) ...[
+                              if (RolePermissions.isLeadership(RolePermissions.normalizeRole(_member?['role']?.toString())) &&
+                                  RolePermissions.normalizeRole(_member?['role']?.toString()) != 'member') ...[
                                 const SizedBox(width: 12),
                                 _buildQuickAction(Icons.admin_panel_settings_rounded, 'Admin\nPanel', const Color(0xFF1E3A8A), () {
                                   Navigator.pushNamed(context, '/admin');

@@ -185,6 +185,7 @@ class SupabaseService {
     _cachedMemberDoc = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('last_login_time');
+    await OfflineCacheService.clearAll();
     await _auth.signOut();
   }
 

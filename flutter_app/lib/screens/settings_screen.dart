@@ -86,7 +86,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await SupabaseService.signOut();
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, LoginScreen.route, (_) => false);
+        Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
+          LoginScreen.route,
+          (route) => false,
+        );
       }
     } catch (e) {
       if (mounted) {
