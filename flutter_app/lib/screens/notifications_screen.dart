@@ -78,6 +78,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final t = title.toLowerCase();
     final m = message.toLowerCase();
     
+    if (type == 'payment_received' || t.contains('payment received')) return Icons.payments_rounded;
+    if (type == 'payment_updated' || t.contains('payment updated')) return Icons.verified_rounded;
     if (t.contains('approved') || m.contains('approved') || t.contains('✅')) return Icons.verified_rounded;
     if (t.contains('pending') || m.contains('pending')) return Icons.hourglass_empty_rounded;
     if (t.contains('recorded') || m.contains('recorded')) return Icons.receipt_long_rounded;
@@ -85,7 +87,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (m.contains('kes')) return Icons.account_balance_wallet_rounded;
     
     switch (type) {
-      case 'payment': return Icons.account_balance_wallet_rounded;
+      case 'payment':
+      case 'payment_received': return Icons.payments_rounded;
+      case 'payment_updated': return Icons.verified_rounded;
       case 'approval': return Icons.verified_rounded;
       case 'system': return Icons.info_rounded;
       default: return Icons.notifications_active_rounded;
@@ -96,6 +100,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final t = title.toLowerCase();
     final m = message.toLowerCase();
     
+    if (type == 'payment_received' || t.contains('payment received')) return const Color(0xFF10B981); // Emerald Green
+    if (type == 'payment_updated' || t.contains('payment updated')) return const Color(0xFF2563EB); // Royal Blue
     if (t.contains('approved') || m.contains('approved') || t.contains('✅')) return AppColors.success;
     if (t.contains('pending') || m.contains('pending')) return Colors.orange.shade600;
     if (t.contains('recorded') || m.contains('recorded')) return const Color(0xFF3B82F6); // Bright Blue
@@ -104,6 +110,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     switch (type) {
       case 'payment': return AppColors.primary;
+      case 'payment_received': return const Color(0xFF10B981);
+      case 'payment_updated': return const Color(0xFF2563EB);
       case 'approval': return AppColors.success;
       case 'system': return AppColors.primaryDark;
       default: return AppColors.primary;

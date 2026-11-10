@@ -488,24 +488,201 @@ class SupabaseService {
 
   static Future<List<Map<String, dynamic>>> adminFetchAllPayments() async {
     final snap = await _firestore.collection('payments').get();
-    final list = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-    list.sort((a, b) => (b['payment_date'] ?? '').toString().compareTo((a['payment_date'] ?? '').toString()));
+    List<Map<String, dynamic>> membersList = [];
+    try {
+      membersList = await adminFetchAllMembers();
+    } catch (_) {}
+
+    final Map<String, Map<String, dynamic>> membersMap = {};
+    for (final m in membersList) {
+      final fixedM = Map<String, dynamic>.from(m);
+      final rName = (m['full_name'] ?? m['name'] ?? (m['form_details'] as Map?)?['full_name'])?.toString().trim();
+      if (rName != null && rName.isNotEmpty && rName.toLowerCase() != 'unknown') {
+        fixedM['full_name'] = rName;
+      }
+      final id = m['id']?.toString();
+      if (id != null) membersMap[id] = fixedM;
+      final uid = m['uid']?.toString();
+      if (uid != null) membersMap[uid] = fixedM;
+      final authUid = m['auth_uid']?.toString();
+      if (authUid != null) membersMap[authUid] = fixedM;
+      final memberId = m['member_id']?.toString();
+      if (memberId != null) membersMap[memberId] = fixedM;
+    }
+
+    final list = snap.docs.map((d) {
+      final data = {'id': d.id, ...d.data()};
+      final memberId = (data['member_id'] ?? data['user_id'])?.toString();
+      if (memberId != null && membersMap.containsKey(memberId)) {
+        final m = membersMap[memberId]!;
+        final resolvedName = (m['full_name'] ?? m['name'] ?? (m['form_details'] as Map?)?['full_name'])?.toString().trim();
+        data['members'] = m;
+        if (resolvedName != null && resolvedName.isNotEmpty && resolvedName.toLowerCase() != 'unknown') {
+          data['member_name'] = resolvedName;
+        }
+      } else if (data['members'] == null && data['member_name'] != null && data['member_name'].toString().trim().isNotEmpty && data['member_name'].toString().toLowerCase() != 'unknown') {
+        data['members'] = {'full_name': data['member_name']};
+      }
+      return data;
+    }).toList();
+
+    list.sort((a, b) => (b['payment_date'] ?? b['created_at'] ?? '').toString().compareTo((a['payment_date'] ?? a['created_at'] ?? '').toString()));
     return list;
   }
 
   static Future<void> adminAddPayment(Map<String, dynamic> data) async {
     final docRef = _firestore.collection('payments').doc();
     final id = docRef.id;
+    final now = DateTime.now().toIso8601String();
+
+    // Resolve member name if missing or 'Unknown'
+    String memberName = data['member_name']?.toString() ?? 'Member';
+    final memberId = (data['member_id'] ?? data['user_id'])?.toString();
+    if (memberId != null && (memberName == 'Unknown' || memberName.trim().isEmpty || memberName == 'Member')) {
+      try {
+        final memberDoc = await _firestore.collection('members').doc(memberId).get();
+        if (memberDoc.exists && memberDoc.data() != null) {
+          final mData = memberDoc.data()!;
+          final foundName = (mData['full_name'] ?? mData['name'] ?? (mData['form_details'] as Map?)?['full_name'])?.toString();
+          if (foundName != null && foundName.trim().isNotEmpty && foundName.trim().toLowerCase() != 'unknown') {
+            memberName = foundName.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
     final payload = {
       'id': id,
       ...data,
-      if (!data.containsKey('created_at')) 'created_at': DateTime.now().toIso8601String(),
+      'member_name': memberName,
+      if (!data.containsKey('created_at')) 'created_at': now,
+      if (!data.containsKey('payment_date')) 'payment_date': now.split('T')[0],
     };
     await docRef.set(payload);
+
+    // Auto-dispatch Notification 1: "Your Payment Has Been Received"
+    if (memberId != null && memberId.isNotEmpty) {
+      final amt = num.tryParse(data['amount']?.toString() ?? '0')?.toDouble() ?? 0.0;
+      final type = (data['payment_type'] ?? data['type'] ?? 'Contribution').toString();
+      final month = data['month']?.toString() ?? '';
+      final ref = data['transaction_id'] ?? data['reference'] ?? data['mpesa_code'] ?? 'RCP-${id.substring(0, 6).toUpperCase()}';
+      final status = (data['status'] ?? 'pending').toString().toUpperCase();
+
+      notifyPaymentReceived(
+        memberId: memberId,
+        amount: amt,
+        paymentType: type,
+        month: month,
+        transactionRef: ref.toString(),
+        status: status,
+      ).catchError((_) => 0);
+
+      // If recorded directly as PAID, also dispatch Notification 2: "Your payment has been updated"
+      if (status == 'PAID') {
+        notifyPaymentUpdated(
+          memberId: memberId,
+          amount: amt,
+          paymentType: type,
+          month: month,
+          newStatus: 'PAID',
+          transactionRef: ref.toString(),
+        ).catchError((_) => 0);
+      }
+    }
   }
 
-  static Future<void> adminUpdatePayment(String id, Map<String, dynamic> data) async {
+  static Future<void> adminUpdatePayment(String id, Map<String, dynamic> data, {String? updaterName, String? updaterRole}) async {
     await _firestore.collection('payments').doc(id).set(data, SetOptions(merge: true));
+
+    // Auto-dispatch Notification 2: "Your Payment Has Been Updated"
+    try {
+      final doc = await _firestore.collection('payments').doc(id).get();
+      if (doc.exists && doc.data() != null) {
+        final pData = doc.data()!;
+        final memberId = (pData['member_id'] ?? pData['user_id'])?.toString();
+        if (memberId != null && memberId.isNotEmpty) {
+          final amt = num.tryParse((data['amount'] ?? pData['amount'])?.toString() ?? '0')?.toDouble() ?? 0.0;
+          final type = (data['payment_type'] ?? pData['payment_type'] ?? data['type'] ?? pData['type'] ?? 'Contribution').toString();
+          final month = (data['month'] ?? pData['month'])?.toString() ?? '';
+          final status = (data['status'] ?? pData['status'] ?? 'Updated').toString();
+          final ref = (data['transaction_id'] ?? pData['transaction_id'] ?? data['reference'] ?? pData['reference'] ?? 'RCP-${id.substring(0, 6).toUpperCase()}').toString();
+
+          final u = currentUser;
+          final curMember = _cachedMemberDoc;
+          final sName = updaterName ?? curMember?['full_name'] ?? u?.displayName ?? 'Finance Administration';
+          final sRole = updaterRole ?? curMember?['role'] ?? 'Official';
+
+          notifyPaymentUpdated(
+            memberId: memberId,
+            amount: amt,
+            paymentType: type,
+            month: month,
+            newStatus: status,
+            updaterName: sName,
+            updaterRole: sRole.toString(),
+            transactionRef: ref,
+          ).catchError((_) => 0);
+        }
+      }
+    } catch (e) {
+      debugPrint('adminUpdatePayment notification error: $e');
+    }
+  }
+
+  /// Dispatches Notification 1: "Your Payment Has Been Received"
+  static Future<int> notifyPaymentReceived({
+    required String memberId,
+    required double amount,
+    required String paymentType,
+    required String month,
+    String? transactionRef,
+    String? status,
+  }) async {
+    final refStr = transactionRef ?? 'REF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final monthStr = month.isNotEmpty ? ' ($month)' : '';
+    final statusStr = (status ?? 'RECEIVED').toUpperCase();
+
+    final title = '💰 Payment Received: KES ${amount.toStringAsFixed(0)}';
+    final message = 'Your payment of KES ${amount.toStringAsFixed(0)} for $paymentType$monthStr has been received and logged to your welfare account. Reference: $refStr. Status: $statusStr.';
+
+    await adminSendNotification(
+      memberIds: [memberId],
+      title: title,
+      message: message,
+      type: 'payment_received',
+    );
+    return 1;
+  }
+
+  /// Dispatches Notification 2: "Your Payment Has Been Updated"
+  static Future<int> notifyPaymentUpdated({
+    required String memberId,
+    required double amount,
+    required String paymentType,
+    required String month,
+    required String newStatus,
+    String? updaterName,
+    String? updaterRole,
+    String? transactionRef,
+  }) async {
+    final refStr = transactionRef ?? 'REF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final monthStr = month.isNotEmpty ? ' ($month)' : '';
+    final statusUpper = newStatus.toUpperCase();
+    final authority = updaterName != null ? ' by $updaterName' : '';
+    final roleStr = updaterRole != null ? ' ($updaterRole)' : '';
+
+    final title = '✅ Payment Updated: KES ${amount.toStringAsFixed(0)} ($statusUpper)';
+    final message = 'Your payment of KES ${amount.toStringAsFixed(0)} for $paymentType$monthStr has been updated to $statusUpper$authority$roleStr. Reference: $refStr.';
+
+    await adminSendNotification(
+      memberIds: [memberId],
+      title: title,
+      message: message,
+      type: 'payment_updated',
+      senderName: updaterName,
+      senderRole: updaterRole,
+    );
+    return 1;
   }
 
   static Future<void> adminDeletePayment(String id) async {

@@ -47,27 +47,169 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     }
   }
 
+  String _getMemberName(Map<String, dynamic>? member) {
+    if (member == null) return 'Member';
+    final fn = member['full_name']?.toString().trim();
+    if (fn != null && fn.isNotEmpty && fn.toLowerCase() != 'unknown') return fn;
+    final n = member['name']?.toString().trim();
+    if (n != null && n.isNotEmpty && n.toLowerCase() != 'unknown') return n;
+    final fd = member['form_details'];
+    if (fd is Map) {
+      final fdn = fd['full_name']?.toString().trim();
+      if (fdn != null && fdn.isNotEmpty && fdn.toLowerCase() != 'unknown') return fdn;
+    }
+    final email = member['email']?.toString().trim();
+    if (email != null && email.isNotEmpty) return email.split('@').first;
+    return 'Member';
+  }
+
+  String _csvEscape(dynamic val) {
+    if (val == null) return '""';
+    final s = val.toString().replaceAll('"', '""').replaceAll('\n', ' ').replaceAll('\r', ' ');
+    return '"$s"';
+  }
+
   Future<void> _exportMembers() async {
-    try {
-      final List<String> csvRows = ['Name,Email,Phone,Role,Status,Branch'];
-      for (var m in _filtered) {
-        final name = m['full_name']?.toString() ?? 'Unknown';
-        final email = m['email']?.toString() ?? '';
-        final phone = m['phone']?.toString() ?? '';
-        final role = m['role']?.toString() ?? '';
-        final status = m['status']?.toString() ?? '';
-        final branch = (m['form_details'] as Map?)?['branch']?.toString() ?? '';
-        
-        final safeName = name.replaceAll('"', '""');
-        csvRows.add('"$safeName","$email","$phone","$role","$status","$branch"');
+    List<Map<String, dynamic>> targetList = _members;
+    if (_filtered.length < _members.length) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Export Member Records', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text(
+            'Download all ${_members.length} registered members or only the ${_filtered.length} currently filtered members?',
+            style: GoogleFonts.outfit(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, 'filtered'),
+              child: Text('Filtered (${_filtered.length})'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              onPressed: () => Navigator.pop(ctx, 'all'),
+              child: Text('All Members (${_members.length})', style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (choice == null || choice == 'cancel') return;
+      if (choice == 'filtered') {
+        targetList = _filtered;
+      } else {
+        targetList = _members;
       }
-      
+    }
+
+    try {
+      final List<String> csvRows = [
+        'Member ID,Full Name,Email,Phone,Role,Status,Branch,National ID,Date of Birth,Gender,Marital Status,Occupation,Country,County,Sub-County,Ward,Village or Estate,Next of Kin Name,Next of Kin Relationship,Next of Kin Phone,Next of Kin ID,Next of Kin ID Type,Has Dependants,Dependants Count,Dependants Details,Rules Ratified,Ratified Date,Termination Reason,Terminated Date,Joined Date'
+      ];
+
+      for (var m in targetList) {
+        final fd = (m['form_details'] as Map<String, dynamic>?) ?? {};
+        final name = _getMemberName(m);
+        final email = m['email']?.toString() ?? '';
+        final phone = m['phone']?.toString() ?? fd['phone']?.toString() ?? '';
+        final role = m['role']?.toString() ?? 'member';
+        final status = m['status']?.toString() ?? 'active';
+        final branch = fd['branch']?.toString() ?? '';
+        final nationalId = fd['national_id_number'] ?? fd['id_number'] ?? m['national_id'] ?? '';
+        final dob = fd['date_of_birth'] ?? fd['dob'] ?? '';
+        final gender = fd['gender']?.toString() ?? '';
+        final marital = fd['marital_status']?.toString() ?? '';
+        final occupation = fd['occupation'] ?? fd['profession'] ?? '';
+        final country = fd['country'] ?? m['country'] ?? 'Kenya';
+        final county = fd['county'] ?? '';
+        final subCounty = fd['sub_county'] ?? fd['subcounty'] ?? '';
+        final ward = fd['ward'] ?? fd['word'] ?? '';
+        final village = fd['village'] ?? fd['estate'] ?? fd['residence'] ?? '';
+
+        final nokName = fd['next_of_kin_full_name'] ?? fd['nok_name'] ?? '';
+        final nokRel = fd['relationship_to_you'] ?? fd['relationship'] ?? '';
+        final nokPhone = fd['next_of_kin_phone_number'] ?? fd['nok_phone'] ?? '';
+        final nokId = fd['next_of_kin_national_id_number'] ?? fd['nok_id'] ?? '';
+        final nokIdType = fd['next_of_kin_id_type'] ?? fd['nok_id_type'] ?? '';
+
+        final hasDependants = fd['has_dependants']?.toString() ?? 'No';
+        final rawDeps = fd['dependants_list'] ?? fd['dependants_details'];
+        int depCount = 0;
+        String depDetails = '';
+        if (rawDeps is List && rawDeps.isNotEmpty) {
+          depCount = rawDeps.length;
+          depDetails = rawDeps.map((d) {
+            final dm = (d as Map).cast<String, dynamic>();
+            return '${dm['name'] ?? 'Unnamed'} (${dm['relationship'] ?? 'Dep'}, Age: ${dm['age'] ?? 'N/A'}, ${dm['id_type'] ?? 'ID'}: ${dm['id_number'] ?? 'N/A'})';
+          }).join('; ');
+        } else if (fd['number_of_dependants'] != null) {
+          depCount = int.tryParse(fd['number_of_dependants'].toString()) ?? 0;
+        }
+
+        final rulesRatified = ((fd['agreed_to_welfare_rules'] == true) || (m['agreed_to_welfare_rules'] == true)) ? 'Yes' : 'No';
+        final ratifiedDate = fd['welfare_rules_agreed_at'] ?? m['welfare_rules_agreed_at'] ?? '';
+        final termReason = m['termination_reason']?.toString() ?? '';
+        final termDate = m['terminated_at']?.toString() ?? '';
+        final joinedDate = m['created_at']?.toString() ?? '';
+
+        csvRows.add([
+          _csvEscape(m['id']),
+          _csvEscape(name),
+          _csvEscape(email),
+          _csvEscape(phone),
+          _csvEscape(role),
+          _csvEscape(status),
+          _csvEscape(branch),
+          _csvEscape(nationalId),
+          _csvEscape(dob),
+          _csvEscape(gender),
+          _csvEscape(marital),
+          _csvEscape(occupation),
+          _csvEscape(country),
+          _csvEscape(county),
+          _csvEscape(subCounty),
+          _csvEscape(ward),
+          _csvEscape(village),
+          _csvEscape(nokName),
+          _csvEscape(nokRel),
+          _csvEscape(nokPhone),
+          _csvEscape(nokId),
+          _csvEscape(nokIdType),
+          _csvEscape(hasDependants),
+          _csvEscape(depCount),
+          _csvEscape(depDetails),
+          _csvEscape(rulesRatified),
+          _csvEscape(ratifiedDate),
+          _csvEscape(termReason),
+          _csvEscape(termDate),
+          _csvEscape(joinedDate),
+        ].join(','));
+      }
+
       final csvString = csvRows.join('\n');
       final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/members_export.csv');
+      final timestamp = DateTime.now().toIso8601String().substring(0, 10);
+      final file = File('${directory.path}/OneFellowship_Members_$timestamp.csv');
       await file.writeAsString(csvString);
-      
-      await Share.shareXFiles([XFile(file.path)], text: 'OneFellowship Members Export');
+
+      // Audit trail
+      await SupabaseService.logAuditEvent(
+        action: 'MEMBERS_EXPORTED',
+        title: 'Member Details Downloaded',
+        description: 'Downloaded complete KYC and membership profile records for ${targetList.length} members.',
+        category: 'members',
+        performedBy: SupabaseService.currentUser?.displayName ?? 'Admin',
+        performedById: SupabaseService.currentUser?.id,
+        performedByRole: 'Administrator',
+        metadata: {'exported_count': targetList.length},
+      );
+
+      await Share.shareXFiles([XFile(file.path)], text: 'OneFellowship Complete Members Export ($timestamp)');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export error: $e')));
     }
@@ -75,7 +217,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
 
   void _applyFilters() {
     _filtered = _members.where((m) {
-      final name = m['full_name']?.toString().toLowerCase() ?? '';
+      final name = _getMemberName(m).toLowerCase();
       final email = m['email']?.toString().toLowerCase() ?? '';
       final role = m['role']?.toString().toLowerCase() ?? 'member';
       final status = m['status']?.toString().toLowerCase() ?? 'active';
@@ -111,12 +253,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                       radius: 30,
                       backgroundColor: isTerminated ? const Color(0xFFDC2626) : AppColors.primary,
                       child: Text(
-                        (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
+                        _getMemberName(member).isNotEmpty ? _getMemberName(member)[0].toUpperCase() : 'M',
                         style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(_getMemberName(member), style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
                     Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
                     const SizedBox(height: 14),
 
@@ -595,7 +737,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                       radius: 24,
                       backgroundColor: isTerminated ? Colors.red.shade100 : AppColors.primary.withOpacity(0.1),
                       child: Text(
-                        (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
+                        (_getMemberName(member).isNotEmpty ? _getMemberName(member)[0] : 'M').toUpperCase(),
                         style: GoogleFonts.outfit(
                           color: isTerminated ? Colors.red.shade800 : AppColors.primary,
                           fontWeight: FontWeight.bold,
@@ -612,7 +754,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  member['full_name'] ?? 'Unknown',
+                                  _getMemberName(member),
                                   style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -671,7 +813,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   const SizedBox(height: 8),
                   ...((fd['dependants_list'] ?? fd['dependants_details']) as List).asMap().entries.map((e) {
                     final m = (e.value as Map).cast<String, dynamic>();
-                    final dName = m['name'] ?? 'Unknown';
+                    final dName = m['name'] ?? m['full_name'] ?? 'Dependant';
                     final dAge = m['age'] ?? 'N/A';
                     final dId = m['id_number'] ?? m['identification'] ?? 'N/A';
                     final dType = m['id_type'] ?? 'ID / Cert';
@@ -793,7 +935,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                           radius: 18,
                           backgroundColor: AppColors.primary,
                           child: Text(
-                            (member['full_name']?.toString() ?? 'M')[0].toUpperCase(),
+                            (_getMemberName(member).isNotEmpty ? _getMemberName(member)[0] : 'M').toUpperCase(),
                             style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                         ),
@@ -802,7 +944,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(member['full_name'] ?? 'Unknown', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+                              Text(_getMemberName(member), style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
                               Text(member['email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11)),
                             ],
                           ),
@@ -1024,7 +1166,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                             itemCount: _filtered.length,
                             itemBuilder: (context, index) {
                               final member = _filtered[index];
-                              final name = member['full_name']?.toString() ?? 'Unknown';
+                              final name = _getMemberName(member);
                               final email = member['email']?.toString() ?? '';
                               final role = member['role']?.toString().toUpperCase() ?? 'MEMBER';
                               final status = member['status']?.toString().toUpperCase() ?? 'ACTIVE';

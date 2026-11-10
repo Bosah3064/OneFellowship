@@ -93,6 +93,57 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     }
   }
 
+  String _getMemberName(Map<String, dynamic>? member) {
+    if (member == null) return 'Member';
+    final fn = member['full_name']?.toString().trim();
+    if (fn != null && fn.isNotEmpty && fn.toLowerCase() != 'unknown') return fn;
+    final n = member['name']?.toString().trim();
+    if (n != null && n.isNotEmpty && n.toLowerCase() != 'unknown') return n;
+    final fd = member['form_details'];
+    if (fd is Map) {
+      final fdn = fd['full_name']?.toString().trim();
+      if (fdn != null && fdn.isNotEmpty && fdn.toLowerCase() != 'unknown') return fdn;
+    }
+    final email = member['email']?.toString().trim();
+    if (email != null && email.isNotEmpty) return email.split('@').first;
+    return 'Member';
+  }
+
+  String _getPaymentMemberName(Map<String, dynamic> payment) {
+    // 1. Nested members map (from join)
+    final nested = payment['members'];
+    if (nested is Map) {
+      final name = _getMemberName(nested.cast<String, dynamic>());
+      if (name != 'Member') return name;
+    }
+
+    // 2. Direct field member_name
+    final fn = payment['member_name']?.toString().trim();
+    if (fn != null && fn.isNotEmpty && fn.toLowerCase() != 'unknown' && fn.toLowerCase() != 'member') {
+      return fn;
+    }
+
+    // 3. Fallback: Lookup in _members list
+    final targetId = (payment['member_id'] ?? payment['user_id'])?.toString();
+    if (targetId != null && targetId.isNotEmpty) {
+      final found = _members.firstWhere(
+        (m) =>
+            m['id']?.toString() == targetId ||
+            m['member_id']?.toString() == targetId ||
+            m['uid']?.toString() == targetId ||
+            m['auth_uid']?.toString() == targetId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (found.isNotEmpty) {
+        final name = _getMemberName(found);
+        if (name != 'Member') return name;
+      }
+    }
+
+    // 4. Default
+    return (fn != null && fn.isNotEmpty && fn.toLowerCase() != 'unknown') ? fn : 'Member';
+  }
+
   // ═══════════════════════════════════════════════════════════════
   //  FILTERED PAYMENTS (Tab 1)
   // ═══════════════════════════════════════════════════════════════
@@ -112,9 +163,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       list = list.where((p) {
-        final name =
-            (p['members'] as Map?)?['full_name']?.toString().toLowerCase() ??
-                '';
+        final name = _getPaymentMemberName(p).toLowerCase();
         final month = p['month']?.toString().toLowerCase() ?? '';
         return name.contains(q) || month.contains(q);
       }).toList();
@@ -215,7 +264,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         if (id != null && !existingIds.contains(id)) {
           await SupabaseService.adminAddPayment({
             'member_id': id,
-            'member_name': member['full_name'] ?? 'Unknown',
+            'member_name': _getMemberName(member),
             'amount': 0,
             'month': currentMonth,
             'payment_type': 'Monthly Contribution',
@@ -251,9 +300,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     try {
       final rows = <String>['Name,Month,Amount,Type,Status,Date'];
       for (var p in _filteredPayments) {
-        final name = (p['members'] as Map?)?['full_name']?.toString() ??
-            p['member_name']?.toString() ??
-            'Unknown';
+        final name = _getPaymentMemberName(p);
         final month = p['month']?.toString() ?? '';
         final amount = p['amount']?.toString() ?? '0';
         final type = (p['payment_type'] ?? p['type'])?.toString() ?? '';
@@ -291,8 +338,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              (payment['members'] as Map?)?['full_name']?.toString() ??
-                  'Member',
+              _getPaymentMemberName(payment),
               style:
                   GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600),
             ),
@@ -433,8 +479,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                         items: _members
                             .map((m) => DropdownMenuItem(
                                 value: m['id'].toString(),
-                                child: Text(
-                                    m['full_name']?.toString() ?? 'Unknown')))
+                                child: Text(_getMemberName(m))))
                             .toList(),
                         onChanged: (v) => setD(() => selectedMemberId = v),
                       ),
@@ -614,13 +659,18 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                       }
                     }
 
+                    final targetMemberId = isEditing ? payment['member_id']?.toString() : selectedMemberId;
+                    final targetMember = _members.firstWhere(
+                      (m) => m['id']?.toString() == targetMemberId || m['member_id']?.toString() == targetMemberId,
+                      orElse: () => <String, dynamic>{},
+                    );
+                    final resolvedMemberName = _getMemberName(targetMember.isNotEmpty ? targetMember : null);
+
                     final data = {
                       if (!isEditing) 'member_id': selectedMemberId,
-                      if (!isEditing)
-                        'member_name': _members.firstWhere(
-                                (m) => m['id'].toString() == selectedMemberId,
-                                orElse: () => {})['full_name'] ??
-                            'Unknown',
+                      'member_name': resolvedMemberName != 'Member'
+                          ? resolvedMemberName
+                          : (payment != null ? _getPaymentMemberName(payment) : 'Member'),
                       'amount': int.tryParse(amountCtrl.text) ?? 0,
                       'month': month,
                       'payment_type': type,
@@ -915,8 +965,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     final month = payment['month']?.toString() ?? '';
     final status = payment['status']?.toString().toLowerCase() ?? 'pending';
     final type = (payment['payment_type'] ?? payment['type'])?.toString() ?? '';
-    final memberName =
-        (payment['members'] as Map?)?['full_name']?.toString() ?? 'Unknown';
+    final memberName = _getPaymentMemberName(payment);
     final isPending = status == 'pending';
     final isPaid = status == 'paid';
 
@@ -1068,7 +1117,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     final filteredMembers = _memberSearchQuery.isEmpty
         ? _members
         : _members.where((m) {
-            final n = (m['full_name']?.toString() ?? '').toLowerCase();
+            final n = _getMemberName(m).toLowerCase();
             return n.contains(_memberSearchQuery.toLowerCase());
           }).toList();
 
@@ -1118,13 +1167,13 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     leading: CircleAvatar(
                       backgroundColor: AppColors.primary.withOpacity(0.1),
                       child: Text(
-                        (m['full_name']?.toString() ?? 'U')[0].toUpperCase(),
+                        _getMemberName(m).isNotEmpty ? _getMemberName(m)[0].toUpperCase() : 'M',
                         style: GoogleFonts.outfit(
                             color: AppColors.primary,
                             fontWeight: FontWeight.bold),
                       ),
                     ),
-                    title: Text(m['full_name'] ?? 'Unknown',
+                    title: Text(_getMemberName(m),
                         style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
                     subtitle: Text(m['phone']?.toString() ?? '',
                         style: GoogleFonts.outfit(
@@ -1173,14 +1222,13 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
               CircleAvatar(
                 backgroundColor: AppColors.primary.withOpacity(0.12),
                 child: Text(
-                  (_selectedMember!['full_name']?.toString() ?? 'U')[0]
-                      .toUpperCase(),
+                  _getMemberName(_selectedMember).isNotEmpty ? _getMemberName(_selectedMember)[0].toUpperCase() : 'M',
                   style: GoogleFonts.outfit(
                       color: AppColors.primary, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
-              Text(_selectedMember!['full_name'] ?? 'Unknown',
+              Text(_getMemberName(_selectedMember),
                   style: GoogleFonts.outfit(
                       fontWeight: FontWeight.w700, fontSize: 16)),
             ]),
@@ -1350,7 +1398,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
       } else {
         await SupabaseService.adminAddPayment({
           'member_id': member['id'],
-          'member_name': member['full_name'] ?? 'Unknown',
+          'member_name': _getMemberName(member),
           'amount': amount,
           'month': fullMonth,
           'payment_type': 'Monthly Contribution',
@@ -1375,7 +1423,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     final filteredMembers = _bulkSearch.isEmpty
         ? _members
         : _members.where((m) {
-            final n = (m['full_name']?.toString() ?? '').toLowerCase();
+            final n = _getMemberName(m).toLowerCase();
             return n.contains(_bulkSearch.toLowerCase());
           }).toList();
 
@@ -1567,7 +1615,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                     }
                   });
                 },
-                title: Text(m['full_name'] ?? 'Unknown',
+                title: Text(_getMemberName(m),
                     style: GoogleFonts.outfit(
                         fontWeight: FontWeight.w600, fontSize: 14)),
                 subtitle: Text(m['phone']?.toString() ?? '',
@@ -1580,7 +1628,9 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                       ? AppColors.primary.withOpacity(0.12)
                       : Colors.grey.shade100,
                   child: Text(
-                    (m['full_name']?.toString() ?? 'U')[0].toUpperCase(),
+                    _getMemberName(m).isNotEmpty
+                        ? _getMemberName(m)[0].toUpperCase()
+                        : 'M',
                     style: GoogleFonts.outfit(
                         color:
                             isSelected ? AppColors.primary : Colors.grey,
@@ -1754,7 +1804,10 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
       final userId = SupabaseService.currentUser?.id;
 
       for (final memberId in _bulkSelectedIds) {
-        final memberName = _members.firstWhere((m) => m['id'].toString() == memberId, orElse: () => {})['full_name'] ?? 'Unknown';
+        final targetMember = _members.firstWhere(
+            (m) => m['id'].toString() == memberId || m['member_id']?.toString() == memberId,
+            orElse: () => <String, dynamic>{});
+        final memberName = _getMemberName(targetMember.isNotEmpty ? targetMember : null);
         double memberPayoutSum = 0;
 
         final paymentsToUpdate = allPayments.where((p) {
@@ -1831,9 +1884,10 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
           skipped++;
           continue;
         }
-        final memberName = _members.firstWhere(
-            (m) => m['id'].toString() == memberId,
-            orElse: () => {})['full_name'] ?? 'Unknown';
+        final targetMember = _members.firstWhere(
+            (m) => m['id'].toString() == memberId || m['member_id']?.toString() == memberId,
+            orElse: () => <String, dynamic>{});
+        final memberName = _getMemberName(targetMember.isNotEmpty ? targetMember : null);
         await SupabaseService.adminAddPayment({
           'member_id': memberId,
           'member_name': memberName,
@@ -1915,7 +1969,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     final filteredMembers = _summarySearchQuery.isEmpty
         ? _members
         : _members.where((m) {
-            final n = (m['full_name']?.toString() ?? '').toLowerCase();
+            final n = _getMemberName(m).toLowerCase();
             return n.contains(_summarySearchQuery.toLowerCase());
           }).toList();
 
@@ -2015,10 +2069,9 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                             radius: 24,
                             backgroundColor: AppColors.primary.withOpacity(0.1),
                             child: Text(
-                              (member['full_name']?.toString() ?? '?')
-                                  .characters
-                                  .first
-                                  .toUpperCase(),
+                              _getMemberName(member).isNotEmpty
+                                  ? _getMemberName(member)[0].toUpperCase()
+                                  : 'M',
                               style: GoogleFonts.outfit(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.bold,
@@ -2030,7 +2083,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(member['full_name'] ?? 'Unknown',
+                                Text(_getMemberName(member),
                                     style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16)),
